@@ -6,7 +6,7 @@ $pdo = db();
 $no  = trim($_GET['no'] ?? '');
 
 $stmt = $pdo->prepare(
-    'SELECT s.*, u.full_name cashier, c.name customer
+    'SELECT s.*, u.full_name cashier, u.role served_role, c.name customer
      FROM sales s
      LEFT JOIN users u ON u.id = s.user_id
      LEFT JOIN customers c ON c.id = s.customer_id
@@ -64,7 +64,7 @@ $set = settings();
     <table>
         <tr><td>Receipt #</td><td style="text-align:right"><?= e($sale['receipt_no']) ?></td></tr>
         <tr><td>Date</td><td style="text-align:right"><?= e(date('d M Y H:i', strtotime($sale['created_at']))) ?></td></tr>
-        <tr><td>Cashier</td><td style="text-align:right"><?= e($sale['cashier'] ?? '—') ?></td></tr>
+        <tr><td>Served by</td><td style="text-align:right"><?= e($sale['cashier'] ?? '—') ?><?= $sale['served_role'] ? ' (' . e(ucfirst($sale['served_role'])) . ')' : '' ?></td></tr>
         <tr><td>Customer</td><td style="text-align:right"><?= e($sale['customer'] ?? 'Walk-in') ?></td></tr>
     </table>
     <div class="r-line"></div>

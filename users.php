@@ -4,6 +4,19 @@ require_permission('users');
 
 $pdo = db();
 
+/** Build a unique username from a person's name (used for waiters). */
+function gen_username(PDO $pdo, string $name): string
+{
+    $base = preg_replace('/[^a-z0-9]/', '', strtolower(strtok($name, ' '))) ?: 'waiter';
+    $username = $base;
+    $check = $pdo->prepare('SELECT 1 FROM users WHERE username = ?');
+    $i = 1;
+    while ($check->execute([$username]) && $check->fetch()) {
+        $username = $base . (++$i);
+    }
+    return $username;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf();
     $action = $_POST['action'] ?? '';
@@ -27,19 +40,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash('User deleted.');
         } else { flash('You cannot delete your own account.', 'error'); }
     } else {
-        $role = in_array($_POST['role'], ['manager', 'cashier', 'inventory'], true) ? $_POST['role'] : 'cashier';
+        $role     = in_array($_POST['role'], ['manager', 'cashier', 'inventory', 'waiter'], true) ? $_POST['role'] : 'cashier';
+        $name     = trim($_POST['full_name']);
+        $passcode = trim($_POST['passcode'] ?? '');
+        $isWaiter = $role === 'waiter';
+
+        // Validate the passcode (PIN) when one is supplied or required.
+        $passcodeHash = null;
+        $passErr = false;
+        if ($passcode !== '') {
+            if (!preg_match('/^\d{4,8}$/', $passcode)) {
+                flash('Passcode must be 4–8 digits.', 'error'); $passErr = true;
+            } elseif (passcode_in_use($passcode, $id ?: null)) {
+                flash('That passcode is already used by another staff member. Choose a different PIN.', 'error'); $passErr = true;
+            } else {
+                $passcodeHash = password_hash($passcode, PASSWORD_BCRYPT);
+            }
+        } elseif ($isWaiter && !$id) {
+            flash('A waiter needs a passcode (PIN) to log in.', 'error'); $passErr = true;
+        }
+
+        if ($passErr) {
+            redirect('users.php');
+        }
+
         if ($id) {
-            $pdo->prepare('UPDATE users SET full_name=?, username=?, email=?, phone=?, role=? WHERE id=?')
-                ->execute([trim($_POST['full_name']), trim($_POST['username']), $_POST['email'], $_POST['phone'], $role, $id]);
+            // ---- Update existing user ----
+            if ($isWaiter) {
+                $pdo->prepare('UPDATE users SET full_name=?, email=?, phone=?, role=? WHERE id=?')
+                    ->execute([$name, $_POST['email'] ?: null, $_POST['phone'] ?: null, $role, $id]);
+            } else {
+                $pdo->prepare('UPDATE users SET full_name=?, username=?, email=?, phone=?, role=? WHERE id=?')
+                    ->execute([$name, trim($_POST['username']), $_POST['email'], $_POST['phone'], $role, $id]);
+            }
+            if ($passcodeHash) {
+                $pdo->prepare('UPDATE users SET passcode=? WHERE id=?')->execute([$passcodeHash, $id]);
+            }
+            audit('user_update', "User #$id ($name)");
             flash('User updated.');
+        } elseif ($isWaiter) {
+            // ---- Register a new waiter (name + passcode; username auto-generated) ----
+            $username = gen_username($pdo, $name);
+            $randomPw = password_hash(bin2hex(random_bytes(8)), PASSWORD_BCRYPT); // waiters sign in via PIN
+            try {
+                $pdo->prepare('INSERT INTO users (full_name, username, email, phone, role, password_hash, passcode) VALUES (?,?,?,?,?,?,?)')
+                    ->execute([$name, $username, $_POST['email'] ?: null, $_POST['phone'] ?: null, $role, $randomPw, $passcodeHash]);
+                audit('user_create', "Waiter $name");
+                flash("Waiter \"$name\" registered. They can now sign in with their passcode.");
+            } catch (PDOException $e) {
+                flash('Could not register waiter. Please try again.', 'error');
+            }
         } else {
+            // ---- Create manager / cashier / inventory user ----
             if (strlen($_POST['password'] ?? '') < 6) {
                 flash('Password must be at least 6 characters.', 'error');
             } else {
                 try {
-                    $pdo->prepare('INSERT INTO users (full_name, username, email, phone, role, password_hash) VALUES (?,?,?,?,?,?)')
-                        ->execute([trim($_POST['full_name']), trim($_POST['username']), $_POST['email'], $_POST['phone'], $role,
-                            password_hash($_POST['password'], PASSWORD_BCRYPT)]);
+                    $pdo->prepare('INSERT INTO users (full_name, username, email, phone, role, password_hash, passcode) VALUES (?,?,?,?,?,?,?)')
+                        ->execute([$name, trim($_POST['username']), $_POST['email'], $_POST['phone'], $role,
+                            password_hash($_POST['password'], PASSWORD_BCRYPT), $passcodeHash]);
                     audit('user_create', $_POST['username']);
                     flash('User created.');
                 } catch (PDOException $e) {
@@ -129,12 +188,17 @@ require __DIR__ . '/includes/header.php';
         <div class="modal-header"><h5 class="modal-title" id="umTitle">Create Account</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body row g-2">
             <div class="col-12"><label class="form-label">Full Name *</label><input name="full_name" id="ufull" class="form-control" required></div>
-            <div class="col-md-6"><label class="form-label">Username *</label><input name="username" id="uname" class="form-control" required></div>
             <div class="col-md-6"><label class="form-label">Role *</label><select name="role" id="urole" class="form-select">
-                <option value="cashier">Cashier</option><option value="inventory">Inventory Officer</option><option value="manager">Manager</option></select></div>
+                <option value="cashier">Cashier</option><option value="waiter">Waiter</option><option value="inventory">Inventory Officer</option><option value="manager">Manager</option></select></div>
+            <div class="col-md-6" id="unameWrap"><label class="form-label">Username *</label><input name="username" id="uname" class="form-control"></div>
             <div class="col-md-6"><label class="form-label">Email</label><input type="email" name="email" id="uemail" class="form-control"></div>
             <div class="col-md-6"><label class="form-label">Phone</label><input name="phone" id="uphone" class="form-control"></div>
             <div class="col-12" id="pwWrap"><label class="form-label">Password *</label><input type="password" name="password" id="upass" class="form-control"></div>
+            <div class="col-12" id="pinWrap">
+                <label class="form-label">Login Passcode / PIN <span id="pinReq">*</span></label>
+                <input name="passcode" id="upin" class="form-control" inputmode="numeric" pattern="\d{4,8}" maxlength="8" placeholder="4–8 digit PIN">
+                <small class="text-muted" id="pinHint">Waiters sign in on the login screen with this PIN. Leave blank to keep unchanged when editing.</small>
+            </div>
         </div>
         <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button><button class="btn btn-brand">Save</button></div>
     </form>
@@ -152,17 +216,36 @@ require __DIR__ . '/includes/header.php';
 <script>
 const userModal = new bootstrap.Modal('#userModal');
 const resetModal = new bootstrap.Modal('#resetModal');
+let editing = false;
+function toggleRoleFields() {
+    const isWaiter = urole.value === 'waiter';
+    // Waiters: name + PIN only (username auto-generated, no password).
+    document.getElementById('unameWrap').style.display = isWaiter ? 'none' : '';
+    document.getElementById('pwWrap').style.display = (isWaiter || editing) ? 'none' : '';
+    document.getElementById('pinWrap').style.display = '';
+    uname.required = !isWaiter && !editing;
+    upass.required = !isWaiter && !editing;
+    // PIN required only when creating a new waiter.
+    upin.required = isWaiter && !editing;
+    document.getElementById('pinReq').style.display = (isWaiter && !editing) ? '' : 'none';
+    document.getElementById('pinHint').textContent = editing
+        ? 'Leave blank to keep the current PIN unchanged.'
+        : (isWaiter ? 'Required — the waiter signs in with this PIN.' : 'Optional — lets this user also do a quick PIN login.');
+}
+urole.addEventListener('change', toggleRoleFields);
+
 function openUser(u) {
     document.querySelector('#userModal form').reset();
+    editing = !!u;
     if (u) {
         document.getElementById('umTitle').textContent = 'Edit User';
         uid.value = u.id; ufull.value = u.full_name; uname.value = u.username;
         uemail.value = u.email || ''; uphone.value = u.phone || ''; urole.value = u.role;
-        document.getElementById('pwWrap').style.display = 'none'; upass.required = false;
     } else {
         document.getElementById('umTitle').textContent = 'Create Account';
-        uid.value = ''; document.getElementById('pwWrap').style.display = 'block'; upass.required = true;
+        uid.value = '';
     }
+    toggleRoleFields();
     userModal.show();
 }
 function openReset(id) { rid.value = id; resetModal.show(); }

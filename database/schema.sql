@@ -21,7 +21,8 @@ CREATE TABLE users (
   email         VARCHAR(150) DEFAULT NULL,
   phone         VARCHAR(30)  DEFAULT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  role          ENUM('manager','cashier','inventory') NOT NULL DEFAULT 'cashier',
+  passcode      VARCHAR(255) DEFAULT NULL, -- hashed PIN for quick waiter login
+  role          ENUM('manager','cashier','inventory','waiter') NOT NULL DEFAULT 'cashier',
   is_active     TINYINT(1)   NOT NULL DEFAULT 1,
   last_login    DATETIME     DEFAULT NULL,
   created_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
@@ -180,10 +181,13 @@ SET FOREIGN_KEY_CHECKS = 1;
 
 -- Default users. All passwords below are: Pass@123
 -- (bcrypt hash generated with PHP password_hash)
-INSERT INTO users (full_name, username, email, phone, password_hash, role) VALUES
-('System Manager', 'admin',     'admin@muratinacafe.co.ke',  '+254700000001', '$2y$12$gFagdw0AGMmV8gBp/j6hsOHjcsu/hDTkXvv6GRfdJ34GFSdVz.2Xq', 'manager'),
-('Jane Cashier',   'cashier',   'cashier@muratinacafe.co.ke','+254700000002', '$2y$12$gFagdw0AGMmV8gBp/j6hsOHjcsu/hDTkXvv6GRfdJ34GFSdVz.2Xq', 'cashier'),
-('Mike Stocks',    'inventory', 'stock@muratinacafe.co.ke',  '+254700000003', '$2y$12$gFagdw0AGMmV8gBp/j6hsOHjcsu/hDTkXvv6GRfdJ34GFSdVz.2Xq', 'inventory');
+-- Waiter passcodes below are the PINs: Brian = 1234, Aisha = 5678
+INSERT INTO users (full_name, username, email, phone, password_hash, passcode, role) VALUES
+('System Manager', 'admin',     'admin@muratinacafe.co.ke',  '+254700000001', '$2y$12$gFagdw0AGMmV8gBp/j6hsOHjcsu/hDTkXvv6GRfdJ34GFSdVz.2Xq', NULL, 'manager'),
+('Jane Cashier',   'cashier',   'cashier@muratinacafe.co.ke','+254700000002', '$2y$12$gFagdw0AGMmV8gBp/j6hsOHjcsu/hDTkXvv6GRfdJ34GFSdVz.2Xq', NULL, 'cashier'),
+('Mike Stocks',    'inventory', 'stock@muratinacafe.co.ke',  '+254700000003', '$2y$12$gFagdw0AGMmV8gBp/j6hsOHjcsu/hDTkXvv6GRfdJ34GFSdVz.2Xq', NULL, 'inventory'),
+('Brian Waiter',   'brian',     NULL, '+254700000004', '$2y$12$gFagdw0AGMmV8gBp/j6hsOHjcsu/hDTkXvv6GRfdJ34GFSdVz.2Xq', '$2y$12$Mg/sHZuRwLLBEsxClMGO8efrU4JOS6drGamqOq3pgSBJ7OYsXDyo.', 'waiter'),
+('Aisha Waiter',   'aisha',     NULL, '+254700000005', '$2y$12$gFagdw0AGMmV8gBp/j6hsOHjcsu/hDTkXvv6GRfdJ34GFSdVz.2Xq', '$2y$12$eFpuo3kSHk2LxyG3I4N/ou2miApGtspIpwxDbkTFn3om2pOR189l.', 'waiter');
 
 INSERT INTO categories (name, icon) VALUES
 ('Coffee', 'fa-mug-hot'),

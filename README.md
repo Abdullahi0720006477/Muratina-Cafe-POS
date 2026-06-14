@@ -15,12 +15,14 @@ in [`docs/blueprint/`](docs/blueprint):
 
 | | |
 |---|---|
-| **Login** — video/image slideshow background | **Dashboard** — KPIs + charts |
-| ![Login](docs/blueprint/01-login.png) | ![Dashboard](docs/blueprint/02-dashboard.png) |
-| **POS Sales** — grid + cart + payments | **Products** — searchable catalogue |
-| ![POS](docs/blueprint/03-pos.png) | ![Products](docs/blueprint/04-products.png) |
-| **Reports** — with CSV/Excel/PDF export | **Dashboard (Dark mode)** |
-| ![Reports](docs/blueprint/05-reports.png) | ![Dark](docs/blueprint/06-dashboard-dark.png) |
+| **Staff Login** — Manager/Cashier tab | **Waiter Login** — passcode (PIN) pad |
+| ![Login](docs/blueprint/01-login.png) | ![Waiter Login](docs/blueprint/08-login-waiter.png) |
+| **Dashboard** — KPIs + charts | **POS Sales** — grid + cart + payments |
+| ![Dashboard](docs/blueprint/02-dashboard.png) | ![POS](docs/blueprint/03-pos.png) |
+| **Products** — searchable catalogue | **Reports** — CSV/Excel/PDF export |
+| ![Products](docs/blueprint/04-products.png) | ![Reports](docs/blueprint/05-reports.png) |
+| **Dashboard (Dark mode)** | **Thermal receipt** — bold, 80mm |
+| ![Dark](docs/blueprint/06-dashboard-dark.png) | ![Receipt](docs/blueprint/09-receipt-thermal.png) |
 | **Responsive (mobile POS)** | |
 | ![Mobile](docs/blueprint/07-mobile-pos.png) | |
 
@@ -34,8 +36,9 @@ in [`docs/blueprint/`](docs/blueprint):
 
 | Area | What's included |
 |------|-----------------|
-| **Login** | Glassmorphism card, video/image slideshow background, Remember Me, loading animation |
-| **Roles** | Manager (full), Cashier (POS), Inventory Officer (stock) — role-based access control |
+| **Login** | Glassmorphism card, video/image slideshow background, Remember Me, loading animation. Two modes: **staff** (username + password) and **waiter** (personal PIN keypad) |
+| **Roles** | Manager (full), Cashier (POS), **Waiter** (POS via PIN), Inventory Officer (stock) — role-based access control |
+| **Waiters** | Manager registers a waiter with just a **name + passcode (PIN)**. Each waiter signs in with their own PIN, and their name prints on every receipt they serve |
 | **Dashboard** | 6 KPI cards + daily sales, top products, revenue trend charts (Chart.js), recent activity |
 | **POS** | Touch-friendly product grid, category filter, live search/barcode, cart, discounts, notes, 4 payment methods, server-side stock validation in a DB transaction |
 | **Products** | Full CRUD, image upload, SKU/barcode, supplier, expiry, low-stock marks, search & filter |
@@ -86,15 +89,19 @@ in [`docs/blueprint/`](docs/blueprint):
 
 ## 🔑 Demo Accounts
 
-All demo accounts use the password **`Pass@123`**.
+Staff accounts use the password **`Pass@123`**. Waiters sign in on the **Waiter**
+tab with their PIN.
 
-| Username | Role | Access |
-|----------|------|--------|
-| `admin` | Manager | Everything |
-| `cashier` | Cashier | POS, own sales, receipts, customers |
-| `inventory` | Inventory Officer | Products, stock, suppliers |
+| Login | Role | How to sign in | Access |
+|-------|------|----------------|--------|
+| `admin` | Manager | password `Pass@123` | Everything |
+| `cashier` | Cashier | password `Pass@123` | POS, own sales, receipts, customers |
+| `inventory` | Inventory Officer | password `Pass@123` | Products, stock, suppliers |
+| Brian Waiter | Waiter | **PIN `1234`** | POS, own sales, receipts, customers |
+| Aisha Waiter | Waiter | **PIN `5678`** | POS, own sales, receipts, customers |
 
-> Change these passwords (or delete the accounts) before going live.
+> Already imported the old schema? Run `database/migration_waiter.sql` to add the
+> waiter role and PIN column. Change these passwords/PINs before going live.
 
 ---
 

@@ -5,8 +5,9 @@ require_login();
 $pdo = db();
 $role = user_role();
 
-// Cashiers see a slim, sales-focused dashboard scoped to themselves.
-$ownFilter = ($role === 'cashier') ? ' AND user_id = ' . (int) current_user()['id'] : '';
+// Cashiers and waiters see a slim, sales-focused dashboard scoped to themselves.
+$ownFilter = in_array($role, ['cashier', 'waiter'], true)
+    ? ' AND user_id = ' . (int) current_user()['id'] : '';
 
 $todaySales   = $pdo->query("SELECT COALESCE(SUM(total),0) FROM sales WHERE DATE(created_at)=CURDATE()$ownFilter")->fetchColumn();
 $monthSales   = $pdo->query("SELECT COALESCE(SUM(total),0) FROM sales WHERE MONTH(created_at)=MONTH(CURDATE()) AND YEAR(created_at)=YEAR(CURDATE())$ownFilter")->fetchColumn();

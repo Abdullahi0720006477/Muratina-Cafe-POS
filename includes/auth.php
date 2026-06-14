@@ -51,6 +51,7 @@ function can(string $permission): bool
     $matrix = [
         'manager'   => ['*'],
         'cashier'   => ['pos', 'sales_own', 'customers', 'receipt'],
+        'waiter'    => ['pos', 'sales_own', 'customers', 'receipt'],
         'inventory' => ['inventory', 'products', 'suppliers', 'stock', 'customers'],
     ];
     $perms = $matrix[$role] ?? [];
@@ -92,6 +93,69 @@ function attempt_login(string $username, string $password): bool
         return false;
     }
 
+    establish_session($user);
+    return true;
+}
+
+/**
+ * Waiter / staff quick login by passcode (PIN).
+ * Passcodes are stored hashed, so we verify against each active account
+ * that has one set. PINs are kept unique at registration time so the match
+ * is unambiguous — each waiter is identified by their own passcode.
+ */
+function attempt_passcode_login(string $passcode): bool
+{
+    $passcode = trim($passcode);
+    $matched = null;
+    if ($passcode !== '') {
+        $rows = db()->query('SELECT * FROM users WHERE passcode IS NOT NULL AND is_active = 1');
+        foreach ($rows as $u) {
+            if (password_verify($passcode, $u['passcode'])) {
+                $matched = $u;
+                break;
+            }
+        }
+    }
+
+    db()->prepare(
+        'INSERT INTO login_history (user_id, username, ip_address, user_agent, success) VALUES (?,?,?,?,?)'
+    )->execute([
+        $matched['id'] ?? null,
+        $matched['username'] ?? 'passcode',
+        $_SERVER['REMOTE_ADDR'] ?? null,
+        mb_substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255),
+        $matched ? 1 : 0,
+    ]);
+
+    if (!$matched) {
+        return false;
+    }
+
+    establish_session($matched);
+    return true;
+}
+
+/**
+ * True if the given plain passcode is already in use by another user.
+ * Pass $excludeId to skip a user when editing.
+ */
+function passcode_in_use(string $passcode, ?int $excludeId = null): bool
+{
+    $rows = db()->query('SELECT id, passcode FROM users WHERE passcode IS NOT NULL');
+    foreach ($rows as $u) {
+        if ((int) $u['id'] === $excludeId) {
+            continue;
+        }
+        if (password_verify($passcode, $u['passcode'])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** Populate the session for an authenticated user row. */
+function establish_session(array $user): void
+{
     session_regenerate_id(true);
     $_SESSION['user'] = [
         'id'        => (int) $user['id'],
@@ -102,9 +166,7 @@ function attempt_login(string $username, string $password): bool
     $_SESSION['last_activity'] = time();
 
     db()->prepare('UPDATE users SET last_login = NOW() WHERE id = ?')->execute([$user['id']]);
-    audit('login', 'User logged in');
-
-    return true;
+    audit('login', 'Logged in as ' . $user['role']);
 }
 
 function logout_user(): void

@@ -10,7 +10,7 @@ $pdo = db();
 $no  = trim($_GET['no'] ?? '');
 
 $stmt = $pdo->prepare(
-    'SELECT s.*, u.full_name cashier, c.name customer FROM sales s
+    'SELECT s.*, u.full_name cashier, u.role served_role, c.name customer FROM sales s
      LEFT JOIN users u ON u.id = s.user_id
      LEFT JOIN customers c ON c.id = s.customer_id WHERE s.receipt_no = ? LIMIT 1'
 );
@@ -18,7 +18,7 @@ $stmt->execute([$no]);
 $sale = $stmt->fetch();
 if (!$sale) { http_response_code(404); die('Receipt not found.'); }
 
-if (user_role() === 'cashier' && (int) $sale['user_id'] !== (int) current_user()['id']) {
+if (in_array(user_role(), ['cashier', 'waiter'], true) && (int) $sale['user_id'] !== (int) current_user()['id']) {
     http_response_code(403); die('Access denied.');
 }
 
@@ -29,20 +29,33 @@ $set = settings();
 ?>
 <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt <?= e($sale['receipt_no']) ?></title>
 <style>
-body{font-family:'Courier New',monospace;font-size:13px;max-width:320px;margin:0 auto;padding:14px;color:#000}
-h2{text-align:center;margin:.2rem 0}.c{text-align:center}.line{border-top:1px dashed #000;margin:.5rem 0}
-table{width:100%;border-collapse:collapse}td{padding:2px 0}.r{text-align:right}.tot{font-weight:bold;font-size:1.1em}
+/* Thermal-printer layout — 80mm roll, bold and high-contrast */
+@page { size: 80mm auto; margin: 0; }
+* { box-sizing: border-box; }
+body { font-family: 'Courier New', 'Consolas', monospace; font-size: 13px; font-weight: 700;
+       width: 80mm; margin: 0 auto; padding: 4mm; color: #000; line-height: 1.5; }
+h2 { text-align: center; margin: .2rem 0; font-size: 19px; font-weight: 800; letter-spacing: .5px; }
+.c { text-align: center; }
+.line { border-top: 2px dashed #000; margin: .45rem 0; }
+table { width: 100%; border-collapse: collapse; }
+td { padding: 2px 0; font-weight: 700; vertical-align: top; }
+.r { text-align: right; }
+.tot { font-weight: 800; font-size: 1.25em; }
+.tot td { border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 4px 0; }
+.big { font-size: 15px; }
 </style></head><body onload="window.print()">
 <h2><?= e($set['company_name'] ?? 'Muratina Café') ?></h2>
 <div class="c"><?= e($set['address'] ?? '') ?></div>
 <div class="c"><?= e($set['phone'] ?? '') ?></div>
+<?php if (!empty($set['email'])): ?><div class="c"><?= e($set['email']) ?></div><?php endif; ?>
 <div class="line"></div>
 <table>
 <tr><td>Receipt</td><td class="r"><?= e($sale['receipt_no']) ?></td></tr>
 <tr><td>Date</td><td class="r"><?= e(date('d M Y H:i', strtotime($sale['created_at']))) ?></td></tr>
-<tr><td>Cashier</td><td class="r"><?= e($sale['cashier'] ?? '—') ?></td></tr>
+<tr><td>Served by</td><td class="r"><?= e($sale['cashier'] ?? '—') ?><?= $sale['served_role'] ? ' (' . e(ucfirst($sale['served_role'])) . ')' : '' ?></td></tr>
+<tr><td>Customer</td><td class="r"><?= e($sale['customer'] ?? 'Walk-in') ?></td></tr>
 </table><div class="line"></div>
-<table>
+<table class="big">
 <?php foreach ($items as $it): ?>
 <tr><td><?= e($it['product_name']) ?> x<?= (int) $it['qty'] ?></td><td class="r"><?= money($it['line_total']) ?></td></tr>
 <?php endforeach; ?>
@@ -55,4 +68,6 @@ table{width:100%;border-collapse:collapse}td{padding:2px 0}.r{text-align:right}.
 <tr><td>Paid via</td><td class="r"><?= e($sale['payment_method']) ?></td></tr>
 </table><div class="line"></div>
 <div class="c"><?= e($set['receipt_footer'] ?? 'Thank you!') ?></div>
+<div class="c">&nbsp;</div>
+<div class="c">* * *</div>
 </body></html>

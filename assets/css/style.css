@@ -270,26 +270,58 @@ body {
 .login-extra { display: flex; justify-content: space-between; align-items: center; margin: .9rem 0; font-size: .85rem; }
 .login-extra a { color: var(--brand-2); text-decoration: none; }
 .demo-creds { margin-top: 1.25rem; font-size: .78rem; color: rgba(255,255,255,.65); text-align: center; line-height: 1.6; }
+/* Login mode tabs */
+.login-tabs { display: flex; gap: .4rem; margin-bottom: 1.1rem; background: rgba(255,255,255,.08); padding: .3rem; border-radius: 12px; }
+.login-tab {
+    flex: 1; border: none; background: transparent; color: rgba(255,255,255,.7);
+    padding: .55rem .4rem; border-radius: 9px; font-weight: 600; font-size: .82rem; cursor: pointer; transition: .15s;
+}
+.login-tab.active { background: var(--brand-grad); color: #fff; box-shadow: 0 4px 12px rgba(181,101,29,.4); }
+
+/* Waiter PIN pad */
+.pin-display {
+    height: 52px; border-radius: 12px; margin-bottom: 1rem;
+    background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+    display: grid; place-items: center; color: #fff; font-size: 1.8rem; letter-spacing: .4rem;
+}
+.pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; }
+.pin-key {
+    aspect-ratio: 1 / 1; border-radius: 14px; border: 1px solid rgba(255,255,255,.18);
+    background: rgba(255,255,255,.08); color: #fff; font-size: 1.4rem; font-weight: 700; cursor: pointer; transition: .12s;
+}
+.pin-key:hover { background: rgba(255,255,255,.18); }
+.pin-key:active { transform: scale(.94); }
+.pin-enter { background: var(--brand-grad); border-color: transparent; }
+.pin-clear { background: rgba(230,57,70,.25); }
+.waiter-list { text-align: center; color: rgba(255,255,255,.65); font-size: .78rem; margin-top: .9rem; }
+
 .slide-dots { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); display: flex; gap: .5rem; z-index: 2; }
 .slide-dots span { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,.4); cursor: pointer; }
 .slide-dots span.active { background: var(--brand-2); width: 26px; border-radius: 6px; }
 
-/* ---------- Receipt ---------- */
+/* ---------- Receipt (thermal-printer friendly: bold & high-contrast) ---------- */
 .receipt {
-    width: 320px; margin: 1rem auto; background: #fff; color: #111;
-    padding: 1.25rem; font-family: 'Courier New', monospace; font-size: 13px;
+    width: 300px; margin: 1rem auto; background: #fff; color: #000;
+    padding: 1.1rem; font-family: 'Courier New', 'Consolas', monospace;
+    font-size: 14px; font-weight: 700; line-height: 1.45;
     box-shadow: var(--shadow); border-radius: 8px;
 }
-.receipt h3 { text-align: center; margin: .25rem 0; }
-.receipt .r-center { text-align: center; }
+.receipt h3 { text-align: center; margin: .25rem 0; font-size: 19px; font-weight: 800; letter-spacing: .5px; }
+.receipt .r-center { text-align: center; font-weight: 700; }
 .receipt table { width: 100%; border-collapse: collapse; margin: .5rem 0; }
-.receipt td { padding: 2px 0; }
-.receipt .r-line { border-top: 1px dashed #555; margin: .5rem 0; }
+.receipt td { padding: 2px 0; font-weight: 700; }
+.receipt .r-line { border-top: 2px dashed #000; margin: .5rem 0; }
 
 @media print {
+    @page { size: 80mm auto; margin: 0; }
+    body { background: #fff !important; }
     body * { visibility: hidden; }
     .receipt, .receipt * { visibility: visible; }
-    .receipt { position: absolute; left: 0; top: 0; box-shadow: none; margin: 0; }
+    .receipt {
+        position: absolute; left: 0; top: 0; box-shadow: none; margin: 0;
+        width: 80mm; padding: 4mm; font-size: 13px; font-weight: 700; color: #000;
+    }
+    .d-print-none { display: none !important; }
 }
 
 /* ---------- Responsive ---------- */

@@ -34,7 +34,12 @@ require __DIR__ . '/includes/header.php';
     <!-- Cart -->
     <div class="cart-panel">
         <div class="cart-head d-flex justify-content-between align-items-center">
-            <span><i class="fa-solid fa-cart-shopping"></i> Current Order</span>
+            <span>
+                <i class="fa-solid fa-cart-shopping"></i> Current Order
+                <small class="d-block text-muted" style="font-weight:600">
+                    <i class="fa-solid fa-user-clock"></i> Served by <?= e(current_user()['full_name']) ?> (<?= e(ucfirst(user_role())) ?>)
+                </small>
+            </span>
             <button class="btn btn-sm btn-outline-danger" onclick="POS.clear()"><i class="fa-solid fa-trash"></i></button>
         </div>
         <div class="cart-items" id="cartItems">

@@ -6,9 +6,16 @@ if (is_logged_in()) {
 }
 
 $error = '';
+$mode  = $_POST['mode'] ?? 'staff'; // 'staff' or 'waiter' — remembers active tab
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_verify($_POST['csrf'] ?? '')) {
         $error = 'Security token expired. Please try again.';
+    } elseif ($mode === 'waiter') {
+        // Waiters log in with their personal passcode (PIN).
+        if (attempt_passcode_login($_POST['passcode'] ?? '')) {
+            redirect('pos.php');
+        }
+        $error = 'Invalid passcode. Please try again.';
     } else {
         $username = trim($_POST['username'] ?? '');
         $password = $_POST['password'] ?? '';
@@ -26,6 +33,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $timeout = isset($_GET['timeout']);
 $set = settings();
+
+// Names of registered waiters shown on the PIN tab (each logs in by their own PIN).
+$waiters = db()->query("SELECT full_name FROM users WHERE role='waiter' AND is_active=1 ORDER BY full_name")
+    ->fetchAll(PDO::FETCH_COLUMN);
 ?>
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
@@ -72,15 +83,27 @@ $set = settings();
             <div class="alert alert-danger py-2"><i class="fa-solid fa-circle-exclamation"></i> <?= e($error) ?></div>
         <?php endif; ?>
 
-        <form method="post" id="loginForm" autocomplete="off">
+        <!-- Login mode tabs -->
+        <div class="login-tabs">
+            <button type="button" class="login-tab <?= $mode !== 'waiter' ? 'active' : '' ?>" data-tab="staff">
+                <i class="fa-solid fa-user-tie"></i> Manager / Cashier
+            </button>
+            <button type="button" class="login-tab <?= $mode === 'waiter' ? 'active' : '' ?>" data-tab="waiter">
+                <i class="fa-solid fa-user-clock"></i> Waiter
+            </button>
+        </div>
+
+        <!-- Staff login (username + password) -->
+        <form method="post" id="loginForm" autocomplete="off" class="tab-pane <?= $mode !== 'waiter' ? '' : 'd-none' ?>" data-pane="staff">
             <?= csrf_field() ?>
+            <input type="hidden" name="mode" value="staff">
             <div class="mb-3 input-icon">
                 <i class="fa-solid fa-user"></i>
-                <input type="text" name="username" class="form-control form-control-lg" placeholder="Username" required autofocus value="<?= old('username') ?>">
+                <input type="text" name="username" class="form-control form-control-lg" placeholder="Username" value="<?= old('username') ?>">
             </div>
             <div class="mb-2 input-icon">
                 <i class="fa-solid fa-lock"></i>
-                <input type="password" name="password" id="password" class="form-control form-control-lg" placeholder="Password" required>
+                <input type="password" name="password" id="password" class="form-control form-control-lg" placeholder="Password">
             </div>
             <div class="login-extra">
                 <label class="form-check-label" style="color:#fff">
@@ -94,9 +117,28 @@ $set = settings();
             </button>
         </form>
 
+        <!-- Waiter login (passcode / PIN) -->
+        <form method="post" id="waiterForm" class="tab-pane <?= $mode === 'waiter' ? '' : 'd-none' ?>" data-pane="waiter">
+            <?= csrf_field() ?>
+            <input type="hidden" name="mode" value="waiter">
+            <div class="pin-display" id="pinDisplay" aria-live="polite"></div>
+            <input type="hidden" name="passcode" id="passcode">
+            <div class="pin-pad">
+                <?php foreach ([1,2,3,4,5,6,7,8,9] as $n): ?>
+                    <button type="button" class="pin-key" data-key="<?= $n ?>"><?= $n ?></button>
+                <?php endforeach; ?>
+                <button type="button" class="pin-key pin-clear" data-key="clear"><i class="fa-solid fa-delete-left"></i></button>
+                <button type="button" class="pin-key" data-key="0">0</button>
+                <button type="submit" class="pin-key pin-enter"><i class="fa-solid fa-check"></i></button>
+            </div>
+            <?php if ($waiters): ?>
+                <div class="waiter-list">Waiters: <?= e(implode(' · ', $waiters)) ?></div>
+            <?php endif; ?>
+        </form>
+
         <div class="demo-creds">
-            <strong>Demo accounts</strong> (password: <code>Pass@123</code>)<br>
-            admin · cashier · inventory
+            <strong>Demo</strong> — Staff password: <code>Pass@123</code> (admin · cashier · inventory)<br>
+            Waiter PINs: Brian <code>1234</code> · Aisha <code>5678</code>
         </div>
     </div>
 
@@ -106,6 +148,43 @@ $set = settings();
 </div>
 
 <script>
+// Tab switching between Staff and Waiter login
+document.querySelectorAll('.login-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        document.querySelectorAll('.login-tab').forEach(t => t.classList.toggle('active', t === tab));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('d-none', p.dataset.pane !== target));
+    });
+});
+
+// Waiter PIN pad
+(function () {
+    let pin = '';
+    const display = document.getElementById('pinDisplay');
+    const field = document.getElementById('passcode');
+    function refresh() {
+        display.textContent = '●'.repeat(pin.length) || ' ';
+        field.value = pin;
+    }
+    document.querySelectorAll('.pin-key[data-key]').forEach(k => {
+        k.addEventListener('click', () => {
+            const key = k.dataset.key;
+            if (key === 'clear') pin = pin.slice(0, -1);
+            else if (pin.length < 8) pin += key;
+            refresh();
+        });
+    });
+    // physical keyboard support on the waiter tab
+    document.addEventListener('keydown', e => {
+        if (document.querySelector('[data-pane="waiter"]').classList.contains('d-none')) return;
+        if (/^[0-9]$/.test(e.key) && pin.length < 8) { pin += e.key; refresh(); }
+        else if (e.key === 'Backspace') { pin = pin.slice(0, -1); refresh(); }
+    });
+    document.getElementById('waiterForm').addEventListener('submit', e => {
+        if (!pin) { e.preventDefault(); display.textContent = 'Enter PIN'; }
+    });
+})();
+
 // Loading state
 document.getElementById('loginForm').addEventListener('submit', function () {
     document.querySelector('.btn-label').classList.add('d-none');
