@@ -1,0 +1,11 @@
+# Uploaded files (keep directory, ignore contents)
+uploads/products/*
+uploads/logo/*
+!uploads/**/.gitkeep
+
+# Local env / editor
+*.log
+.DS_Store
+.idea/
+.vscode/
+config/config.local.php
