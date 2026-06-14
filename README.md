@@ -8,6 +8,28 @@ meal businesses. Built with **PHP 8 + MySQL + Bootstrap 5**, designed to run on
 
 ---
 
+## 🖼️ Visual Blueprint
+
+Design previews of the key screens (light & dark themes, desktop & mobile) live
+in [`docs/blueprint/`](docs/blueprint):
+
+| | |
+|---|---|
+| **Login** — video/image slideshow background | **Dashboard** — KPIs + charts |
+| ![Login](docs/blueprint/01-login.png) | ![Dashboard](docs/blueprint/02-dashboard.png) |
+| **POS Sales** — grid + cart + payments | **Products** — searchable catalogue |
+| ![POS](docs/blueprint/03-pos.png) | ![Products](docs/blueprint/04-products.png) |
+| **Reports** — with CSV/Excel/PDF export | **Dashboard (Dark mode)** |
+| ![Reports](docs/blueprint/05-reports.png) | ![Dark](docs/blueprint/06-dashboard-dark.png) |
+| **Responsive (mobile POS)** | |
+| ![Mobile](docs/blueprint/07-mobile-pos.png) | |
+
+> These are design renders of the actual `assets/css/style.css`. The live app
+> looks identical once running on Laragon, with Font Awesome icons (shown here
+> as emoji) and live Chart.js charts.
+
+---
+
 ## ✨ Features
 
 | Area | What's included |
