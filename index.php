@@ -5,38 +5,50 @@ if (is_logged_in()) {
     redirect('dashboard.php');
 }
 
-$error = '';
-$mode  = $_POST['mode'] ?? 'staff'; // 'staff' or 'waiter' — remembers active tab
+$error  = '';
+$notice = '';
+$loginMode = $_POST['login_mode'] ?? 'pin';   // 'pin' or 'staff'
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_verify($_POST['csrf'] ?? '')) {
         $error = 'Security token expired. Please try again.';
-    } elseif ($mode === 'waiter') {
-        // Waiters log in with their personal passcode (PIN).
-        if (attempt_passcode_login($_POST['passcode'] ?? '')) {
-            redirect('pos.php');
-        }
-        $error = 'Invalid passcode. Please try again.';
     } else {
-        $username = trim($_POST['username'] ?? '');
-        $password = $_POST['password'] ?? '';
-        if (attempt_login($username, $password)) {
-            if (!empty($_POST['remember'])) {
-                // extend session lifetime to 30 days
-                $p = session_get_cookie_params();
-                setcookie(session_name(), session_id(), time() + 60 * 60 * 24 * 30, '/');
+        $do  = $_POST['do'] ?? 'login';
+        $pin = $_POST['passcode'] ?? '';
+
+        if ($do === 'login' && $loginMode === 'staff') {
+            // Manager / Cashier — username + password
+            if (attempt_login(trim($_POST['username'] ?? ''), $_POST['password'] ?? '')) {
+                if (!empty($_POST['remember'])) {
+                    setcookie(session_name(), session_id(), time() + 60 * 60 * 24 * 30, '/');
+                }
+                redirect('dashboard.php');
             }
-            redirect('dashboard.php');
+            $error = 'Invalid username or password.';
+        } elseif ($do === 'login') {
+            // PIN login (waiters and any staff with a passcode)
+            if (attempt_passcode_login($pin)) {
+                redirect(user_role() === 'waiter' ? 'pos.php' : 'dashboard.php');
+            }
+            $error = 'PIN not recognised.';
+        } else {
+            // Attendance actions — Clock In / Out / Break (do not start a session)
+            $map = ['clock_in' => 'in', 'clock_out' => 'out', 'break' => 'break'];
+            $type = $map[$do] ?? null;
+            $u = $type ? user_by_passcode($pin) : null;
+            if ($u) {
+                db()->prepare('INSERT INTO attendance (user_id, type) VALUES (?,?)')->execute([$u['id'], $type]);
+                $labels = ['in' => 'clocked in', 'out' => 'clocked out', 'break' => 'on break'];
+                $notice = $u['full_name'] . ' — ' . $labels[$type] . ' at ' . date('H:i');
+            } else {
+                $error = 'Enter your PIN, then tap Clock In / Out / Break.';
+            }
         }
-        $error = 'Invalid username or password.';
     }
 }
 
 $timeout = isset($_GET['timeout']);
 $set = settings();
-
-// Names of registered waiters shown on the PIN tab (each logs in by their own PIN).
-$waiters = db()->query("SELECT full_name FROM users WHERE role='waiter' AND is_active=1 ORDER BY full_name")
-    ->fetchAll(PDO::FETCH_COLUMN);
 ?>
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
@@ -52,7 +64,7 @@ $waiters = db()->query("SELECT full_name FROM users WHERE role='waiter' AND is_a
 <div class="login-wrap">
     <!-- Cinematic background: themed muted videos that cross-fade.
          Drop your own clips in assets/videos/ (coffee.mp4, juice.mp4, meals.mp4);
-         the poster images below are shown automatically if a video is missing. -->
+         the poster images are shown automatically if a video is missing. -->
     <div class="login-bg" id="loginBg">
         <div class="bg-scene active" data-caption="Freshly brewed coffee" data-icon="fa-mug-hot">
             <video muted loop playsinline preload="auto"
@@ -82,76 +94,57 @@ $waiters = db()->query("SELECT full_name FROM users WHERE role='waiter' AND is_a
     <div class="login-overlay"></div>
     <div class="bg-caption" id="bgCaption"><i class="fa-solid fa-mug-hot"></i> <span>Freshly brewed coffee</span></div>
 
-    <div class="login-card">
-        <div class="login-logo"><i class="fa-solid fa-mug-hot"></i></div>
-        <h2><?= e($set['company_name'] ?? 'Muratina Café') ?></h2>
-        <p class="subtitle">Restaurant &amp; Café Point of Sale</p>
+    <!-- POS terminal panel (YUMAPOS-style) -->
+    <form method="post" class="pos-terminal" id="posForm" autocomplete="off">
+        <?= csrf_field() ?>
+        <input type="hidden" name="login_mode" id="loginMode" value="pin">
+        <input type="hidden" name="passcode" id="passcode">
 
-        <?php if ($timeout): ?>
-            <div class="alert alert-warning py-2"><i class="fa-solid fa-clock"></i> Session expired. Please sign in again.</div>
-        <?php endif; ?>
-        <?php if ($error): ?>
-            <div class="alert alert-danger py-2"><i class="fa-solid fa-circle-exclamation"></i> <?= e($error) ?></div>
-        <?php endif; ?>
+        <!-- Left: keypad / staff password -->
+        <div class="pt-left">
+            <div id="pinPanel">
+                <div class="pin-screen" id="pinScreen" aria-live="polite"></div>
+                <div class="keypad">
+                    <?php foreach ([1,2,3,4,5,6,7,8,9] as $n): ?>
+                        <button type="button" class="key" data-key="<?= $n ?>"><?= $n ?></button>
+                    <?php endforeach; ?>
+                    <button type="button" class="key key-soft" data-key="back" aria-label="Backspace"><i class="fa-solid fa-arrow-left-long"></i></button>
+                    <button type="button" class="key" data-key="0">0</button>
+                    <button type="button" class="key key-soft" data-key="clear" aria-label="Clear">&times;</button>
+                </div>
+            </div>
 
-        <!-- Login mode tabs -->
-        <div class="login-tabs">
-            <button type="button" class="login-tab <?= $mode !== 'waiter' ? 'active' : '' ?>" data-tab="staff">
-                <i class="fa-solid fa-user-tie"></i> Manager / Cashier
-            </button>
-            <button type="button" class="login-tab <?= $mode === 'waiter' ? 'active' : '' ?>" data-tab="waiter">
-                <i class="fa-solid fa-user-clock"></i> Waiter
-            </button>
+            <div id="staffPanel" class="d-none">
+                <div class="staff-fields">
+                    <div class="input-icon mb-2"><i class="fa-solid fa-user"></i>
+                        <input type="text" name="username" class="form-control form-control-lg" placeholder="Username" value="<?= old('username') ?>"></div>
+                    <div class="input-icon mb-2"><i class="fa-solid fa-lock"></i>
+                        <input type="password" name="password" class="form-control form-control-lg" placeholder="Password"></div>
+                    <label class="remember"><input type="checkbox" name="remember"> Remember me</label>
+                </div>
+            </div>
         </div>
 
-        <!-- Staff login (username + password) -->
-        <form method="post" id="loginForm" autocomplete="off" class="tab-pane <?= $mode !== 'waiter' ? '' : 'd-none' ?>" data-pane="staff">
-            <?= csrf_field() ?>
-            <input type="hidden" name="mode" value="staff">
-            <div class="mb-3 input-icon">
-                <i class="fa-solid fa-user"></i>
-                <input type="text" name="username" class="form-control form-control-lg" placeholder="Username" value="<?= old('username') ?>">
+        <!-- Right: brand + action buttons -->
+        <div class="pt-right">
+            <div class="pt-brand">
+                <span class="pt-logo"><i class="fa-solid fa-mug-hot"></i></span>
+                <span class="pt-name"><?= e($set['company_name'] ?? 'Muratina Café') ?><small>Point of Sale</small></span>
             </div>
-            <div class="mb-2 input-icon">
-                <i class="fa-solid fa-lock"></i>
-                <input type="password" name="password" id="password" class="form-control form-control-lg" placeholder="Password">
-            </div>
-            <div class="login-extra">
-                <label class="form-check-label" style="color:#fff">
-                    <input type="checkbox" name="remember" class="form-check-input"> Remember me
-                </label>
-                <a href="#" onclick="alert('Please contact your manager to reset your password.');return false;">Forgot password?</a>
-            </div>
-            <button type="submit" class="btn btn-brand btn-login" id="loginBtn">
-                <span class="btn-label"><i class="fa-solid fa-right-to-bracket"></i> Sign In</span>
-                <span class="btn-loading d-none"><span class="spinner-border spinner-border-sm"></span> Signing in…</span>
-            </button>
-        </form>
 
-        <!-- Waiter login (passcode / PIN) -->
-        <form method="post" id="waiterForm" class="tab-pane <?= $mode === 'waiter' ? '' : 'd-none' ?>" data-pane="waiter">
-            <?= csrf_field() ?>
-            <input type="hidden" name="mode" value="waiter">
-            <div class="pin-display" id="pinDisplay" aria-live="polite"></div>
-            <input type="hidden" name="passcode" id="passcode">
-            <div class="pin-pad">
-                <?php foreach ([1,2,3,4,5,6,7,8,9] as $n): ?>
-                    <button type="button" class="pin-key" data-key="<?= $n ?>"><?= $n ?></button>
-                <?php endforeach; ?>
-                <button type="button" class="pin-key pin-clear" data-key="clear"><i class="fa-solid fa-delete-left"></i></button>
-                <button type="button" class="pin-key" data-key="0">0</button>
-                <button type="submit" class="pin-key pin-enter"><i class="fa-solid fa-check"></i></button>
-            </div>
-            <?php if ($waiters): ?>
-                <div class="waiter-list">Waiters: <?= e(implode(' · ', $waiters)) ?></div>
-            <?php endif; ?>
-        </form>
+            <?php if ($timeout): ?><div class="pt-alert warn"><i class="fa-solid fa-clock"></i> Session expired. Sign in again.</div><?php endif; ?>
+            <?php if ($error): ?><div class="pt-alert err"><i class="fa-solid fa-circle-exclamation"></i> <?= e($error) ?></div><?php endif; ?>
+            <?php if ($notice): ?><div class="pt-alert ok"><i class="fa-solid fa-circle-check"></i> <?= e($notice) ?></div><?php endif; ?>
 
-        <div class="demo-creds">
-            <strong>Demo</strong> — Staff password: <code>Pass@123</code> (admin · cashier · inventory)<br>
-            Waiter PINs: Brian <code>1234</code> · Aisha <code>5678</code>
+            <button type="submit" name="do" value="login" class="pos-btn primary" id="loginBtn"><i class="fa-solid fa-right-to-bracket"></i> LOGIN</button>
+            <button type="submit" name="do" value="clock_in" class="pos-btn"><i class="fa-solid fa-business-time"></i> CLOCK IN</button>
+            <button type="submit" name="do" value="clock_out" class="pos-btn"><i class="fa-solid fa-door-open"></i> CLOCK OUT</button>
+            <button type="submit" name="do" value="break" class="pos-btn"><i class="fa-solid fa-mug-saucer"></i> BREAK</button>
+
+            <a href="#" class="pt-toggle" id="toggleMode"><i class="fa-solid fa-user-tie"></i> <span>Manager / Cashier password login</span></a>
+            <div class="pt-demo">Waiter PINs <code>1234</code> · <code>5678</code> — Staff <code>admin</code> / <code>Pass@123</code></div>
         </div>
-    </div>
+    </form>
 
     <div class="slide-dots">
         <span class="active" data-i="0"></span><span data-i="1"></span><span data-i="2"></span>
@@ -159,70 +152,55 @@ $waiters = db()->query("SELECT full_name FROM users WHERE role='waiter' AND is_a
 </div>
 
 <script>
-// Tab switching between Staff and Waiter login
-document.querySelectorAll('.login-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-        const target = tab.dataset.tab;
-        document.querySelectorAll('.login-tab').forEach(t => t.classList.toggle('active', t === tab));
-        document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('d-none', p.dataset.pane !== target));
-    });
-});
-
-// Waiter PIN pad
+// ---- Keypad ----
 (function () {
     let pin = '';
-    const display = document.getElementById('pinDisplay');
+    const screen = document.getElementById('pinScreen');
     const field = document.getElementById('passcode');
-    function refresh() {
-        display.textContent = '●'.repeat(pin.length) || ' ';
-        field.value = pin;
-    }
-    document.querySelectorAll('.pin-key[data-key]').forEach(k => {
-        k.addEventListener('click', () => {
-            const key = k.dataset.key;
-            if (key === 'clear') pin = pin.slice(0, -1);
-            else if (pin.length < 8) pin += key;
-            refresh();
-        });
-    });
-    // physical keyboard support on the waiter tab
+    function refresh() { screen.textContent = '*'.repeat(pin.length); field.value = pin; }
+    document.querySelectorAll('.key[data-key]').forEach(k => k.addEventListener('click', () => {
+        const v = k.dataset.key;
+        if (v === 'back') pin = pin.slice(0, -1);
+        else if (v === 'clear') pin = '';
+        else if (pin.length < 8) pin += v;
+        refresh();
+    }));
     document.addEventListener('keydown', e => {
-        if (document.querySelector('[data-pane="waiter"]').classList.contains('d-none')) return;
+        if (!document.getElementById('staffPanel').classList.contains('d-none')) return; // ignore in staff mode
         if (/^[0-9]$/.test(e.key) && pin.length < 8) { pin += e.key; refresh(); }
         else if (e.key === 'Backspace') { pin = pin.slice(0, -1); refresh(); }
     });
-    document.getElementById('waiterForm').addEventListener('submit', e => {
-        if (!pin) { e.preventDefault(); display.textContent = 'Enter PIN'; }
-    });
+    refresh();
 })();
 
-// Loading state
-document.getElementById('loginForm').addEventListener('submit', function () {
-    document.querySelector('.btn-label').classList.add('d-none');
-    document.querySelector('.btn-loading').classList.remove('d-none');
-    document.getElementById('loginBtn').disabled = true;
+// ---- Toggle PIN <-> Staff password ----
+document.getElementById('toggleMode').addEventListener('click', function (e) {
+    e.preventDefault();
+    const staff = document.getElementById('staffPanel');
+    const pinP = document.getElementById('pinPanel');
+    const toStaff = staff.classList.contains('d-none');
+    staff.classList.toggle('d-none', !toStaff);
+    pinP.classList.toggle('d-none', toStaff);
+    document.getElementById('loginMode').value = toStaff ? 'staff' : 'pin';
+    this.querySelector('span').textContent = toStaff ? 'Use waiter PIN keypad' : 'Manager / Cashier password login';
+    // Clock buttons only make sense in PIN mode
+    document.querySelectorAll('.pos-btn:not(.primary)').forEach(b => b.style.display = toStaff ? 'none' : '');
 });
+<?php if ($loginMode === 'staff'): ?>document.getElementById('toggleMode').click();<?php endif; ?>
 
-// Cinematic background — cross-fades themed scenes (coffee → juice → meals)
-// and syncs the caption. Each scene plays its video; if the video can't load,
-// its poster/image fallback stays visible automatically.
+// ---- Cinematic background ----
 (function () {
     const scenes = Array.from(document.querySelectorAll('.bg-scene'));
     const dots = Array.from(document.querySelectorAll('.slide-dots span'));
     const caption = document.getElementById('bgCaption');
     let i = 0;
-
     function show(n) {
         i = (n + scenes.length) % scenes.length;
-        scenes.forEach((scene, idx) => {
-            const on = idx === i;
-            scene.classList.toggle('active', on);
-            const v = scene.querySelector('video');
-            if (v) { on ? v.play().catch(() => {}) : v.pause(); }
+        scenes.forEach((s, idx) => {
+            const on = idx === i; s.classList.toggle('active', on);
+            const v = s.querySelector('video'); if (v) { on ? v.play().catch(() => {}) : v.pause(); }
         });
         dots.forEach((d, idx) => d.classList.toggle('active', idx === i));
-
-        // animate caption swap
         const sc = scenes[i];
         caption.classList.remove('show');
         setTimeout(() => {
@@ -231,7 +209,6 @@ document.getElementById('loginForm').addEventListener('submit', function () {
         }, 350);
     }
     dots.forEach(d => d.addEventListener('click', () => show(+d.dataset.i)));
-
     setInterval(() => show(i + 1), 7000);
     show(0);
 })();

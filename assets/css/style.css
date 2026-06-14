@@ -261,6 +261,78 @@ body {
 .bg-caption i { color: var(--brand-2); margin-right: .4rem; }
 @media (max-width: 600px) { .bg-caption { left: 18px; bottom: 18px; font-size: .9rem; } }
 
+/* ---------- POS terminal (YUMAPOS-style two-column panel) ---------- */
+.pos-terminal {
+    position: relative; z-index: 1;
+    display: grid; grid-template-columns: 1fr 1fr;
+    width: min(860px, 94vw);
+    background: rgba(18, 14, 9, .42);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, .16);
+    border-radius: 22px; overflow: hidden;
+    box-shadow: 0 30px 70px rgba(0, 0, 0, .5);
+    animation: floatIn .7s ease;
+}
+.pt-left { padding: 26px; display: flex; flex-direction: column; justify-content: center; }
+.pt-right { padding: 26px; display: flex; flex-direction: column; gap: 13px; justify-content: center;
+            background: rgba(0, 0, 0, .18); border-left: 1px solid rgba(255, 255, 255, .1); }
+
+.pin-screen {
+    height: 58px; background: #fff; color: #222; border-radius: 11px; margin-bottom: 16px;
+    display: grid; place-items: center; font-size: 1.9rem; letter-spacing: .55rem;
+    font-weight: 700; box-shadow: inset 0 1px 4px rgba(0, 0, 0, .15);
+}
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.keypad .key {
+    aspect-ratio: 1 / 1; border: none; border-radius: 11px;
+    background: #fff; color: #2b2620; font-size: 1.55rem; font-weight: 600;
+    cursor: pointer; transition: .12s; box-shadow: 0 3px 8px rgba(0, 0, 0, .25);
+}
+.keypad .key:hover { background: #f3eee6; }
+.keypad .key:active { transform: scale(.93); }
+.keypad .key-soft { background: rgba(255, 255, 255, .82); color: #8a5a1d; }
+
+.staff-fields .form-control { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25); color: #fff; }
+.staff-fields .form-control::placeholder { color: rgba(255,255,255,.6); }
+.staff-fields .input-icon { position: relative; }
+.staff-fields .input-icon i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,.7); }
+.staff-fields .input-icon .form-control { padding-left: 42px; }
+.staff-fields .remember { color: #fff; font-size: .9rem; }
+
+.pt-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.pt-logo {
+    width: 50px; height: 50px; border-radius: 14px; display: grid; place-items: center;
+    background: var(--brand-grad); color: #fff; font-size: 1.4rem; box-shadow: 0 8px 20px rgba(181,101,29,.5);
+}
+.pt-name { color: #fff; font-size: 1.45rem; font-weight: 800; line-height: 1.1; display: flex; flex-direction: column; }
+.pt-name small { font-size: .72rem; font-weight: 500; letter-spacing: 2px; text-transform: uppercase; color: var(--brand-2); }
+
+.pos-btn {
+    border: none; border-radius: 11px; padding: 15px 16px; cursor: pointer;
+    font-weight: 800; font-size: .98rem; letter-spacing: 1px;
+    display: flex; align-items: center; justify-content: center; gap: .55rem; transition: .14s;
+    background: linear-gradient(135deg, #f0b03a, #e6a02b); color: #2a1a08;
+    box-shadow: 0 6px 16px rgba(230, 160, 43, .35);
+}
+.pos-btn:hover { filter: brightness(1.05); transform: translateY(-1px); }
+.pos-btn:active { transform: translateY(0); }
+.pos-btn.primary { background: var(--brand-grad); color: #fff; }
+
+.pt-toggle { color: var(--brand-2); text-decoration: none; font-size: .85rem; text-align: center; margin-top: 4px; }
+.pt-toggle:hover { color: #fff; }
+.pt-demo { text-align: center; color: rgba(255,255,255,.6); font-size: .76rem; }
+.pt-demo code { color: var(--brand-2); }
+
+.pt-alert { border-radius: 9px; padding: .55rem .8rem; font-size: .85rem; font-weight: 600; }
+.pt-alert.err  { background: rgba(230,57,70,.22); color: #ffd5d8; }
+.pt-alert.ok   { background: rgba(43,147,72,.25); color: #d6ffe0; }
+.pt-alert.warn { background: rgba(224,159,62,.22); color: #ffe9c9; }
+
+@media (max-width: 720px) {
+    .pos-terminal { grid-template-columns: 1fr; width: min(420px, 94vw); }
+    .pt-right { border-left: none; border-top: 1px solid rgba(255,255,255,.1); }
+}
+
 .login-card {
     width: min(420px, 92vw);
     padding: 2.25rem 2rem;

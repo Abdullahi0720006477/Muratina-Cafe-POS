@@ -15,10 +15,10 @@ in [`docs/blueprint/`](docs/blueprint):
 
 | | |
 |---|---|
-| **Staff Login** — Manager/Cashier tab | **Waiter Login** — passcode (PIN) pad |
-| ![Login](docs/blueprint/01-login.png) | ![Waiter Login](docs/blueprint/08-login-waiter.png) |
-| **Dashboard** — KPIs + charts | **POS Sales** — grid + cart + payments |
-| ![Dashboard](docs/blueprint/02-dashboard.png) | ![POS](docs/blueprint/03-pos.png) |
+| **Login Terminal** — PIN keypad + Clock In/Out/Break, video background | **Dashboard** — KPIs + charts |
+| ![Login](docs/blueprint/01-login.png) | ![Dashboard](docs/blueprint/02-dashboard.png) |
+| **POS Sales** — grid + cart + payments | **Thermal receipt** — printed (80mm) |
+| ![POS](docs/blueprint/03-pos.png) | ![Receipt Print](docs/blueprint/10-receipt-print-80mm.png) |
 | **Products** — searchable catalogue | **Reports** — CSV/Excel/PDF export |
 | ![Products](docs/blueprint/04-products.png) | ![Reports](docs/blueprint/05-reports.png) |
 | **Dashboard (Dark mode)** | **Thermal receipt** — bold, 80mm |
@@ -36,9 +36,10 @@ in [`docs/blueprint/`](docs/blueprint):
 
 | Area | What's included |
 |------|-----------------|
-| **Login** | Glassmorphism card, video/image slideshow background, Remember Me, loading animation. Two modes: **staff** (username + password) and **waiter** (personal PIN keypad) |
+| **Login** | YUMAPOS-style terminal: **PIN keypad** sign-in + **Clock In / Out / Break** over a cinematic cross-fading video background (coffee · juice · meals). Toggle to **password login** for managers/cashiers |
 | **Roles** | Manager (full), Cashier (POS), **Waiter** (POS via PIN), Inventory Officer (stock) — role-based access control |
 | **Waiters** | Manager registers a waiter with just a **name + passcode (PIN)**. Each waiter signs in with their own PIN, and their name prints on every receipt they serve |
+| **Attendance** | Staff **Clock In / Out / Break** straight from the login screen using their PIN; managers review it via the **Attendance report** |
 | **Dashboard** | 6 KPI cards + daily sales, top products, revenue trend charts (Chart.js), recent activity |
 | **POS** | Touch-friendly product grid, category filter, live search/barcode, cart, discounts, notes, 4 payment methods, server-side stock validation in a DB transaction |
 | **Products** | Full CRUD, image upload, SKU/barcode, supplier, expiry, low-stock marks, search & filter |

@@ -103,19 +103,25 @@ function attempt_login(string $username, string $password): bool
  * that has one set. PINs are kept unique at registration time so the match
  * is unambiguous — each waiter is identified by their own passcode.
  */
-function attempt_passcode_login(string $passcode): bool
+/** Find the active user whose passcode (PIN) matches, or null. */
+function user_by_passcode(string $passcode): ?array
 {
     $passcode = trim($passcode);
-    $matched = null;
-    if ($passcode !== '') {
-        $rows = db()->query('SELECT * FROM users WHERE passcode IS NOT NULL AND is_active = 1');
-        foreach ($rows as $u) {
-            if (password_verify($passcode, $u['passcode'])) {
-                $matched = $u;
-                break;
-            }
+    if ($passcode === '') {
+        return null;
+    }
+    $rows = db()->query('SELECT * FROM users WHERE passcode IS NOT NULL AND is_active = 1');
+    foreach ($rows as $u) {
+        if (password_verify($passcode, $u['passcode'])) {
+            return $u;
         }
     }
+    return null;
+}
+
+function attempt_passcode_login(string $passcode): bool
+{
+    $matched = user_by_passcode($passcode);
 
     db()->prepare(
         'INSERT INTO login_history (user_id, username, ip_address, user_agent, success) VALUES (?,?,?,?,?)'

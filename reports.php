@@ -43,6 +43,15 @@ function build_report(PDO $pdo, string $type, string $from, string $to): array
             $rows->execute($range);
             return [['Date', 'Revenue', 'Cost', 'Profit'], $rows->fetchAll(), 'Profit Report'];
 
+        case 'attendance':
+            $rows = $pdo->prepare(
+                "SELECT u.full_name, UPPER(a.type) action, DATE_FORMAT(a.created_at,'%Y-%m-%d') day,
+                        DATE_FORMAT(a.created_at,'%H:%i') time
+                 FROM attendance a JOIN users u ON u.id = a.user_id
+                 WHERE a.created_at BETWEEN ? AND ? ORDER BY a.created_at DESC");
+            $rows->execute($range);
+            return [['Employee', 'Action', 'Date', 'Time'], $rows->fetchAll(), 'Attendance Report'];
+
         case 'cashier':
             $rows = $pdo->prepare(
                 'SELECT u.full_name, COUNT(s.id) orders, SUM(s.total) sales
@@ -108,6 +117,7 @@ require __DIR__ . '/includes/header.php';
 $reportTypes = [
     'daily' => 'Daily Sales', 'monthly' => 'Monthly Sales', 'product' => 'Product Sales',
     'inventory' => 'Inventory', 'profit' => 'Profit', 'cashier' => 'Cashier Performance',
+    'attendance' => 'Attendance',
 ];
 $qs = fn(array $extra) => '?' . http_build_query(array_merge(['type' => $type, 'from' => $from, 'to' => $to], $extra));
 ?>
