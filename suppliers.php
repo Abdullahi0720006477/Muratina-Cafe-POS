@@ -68,6 +68,13 @@ require __DIR__ . '/includes/header.php';
 
 <script>
 const supModal = new bootstrap.Modal('#supModal');
+
+const sid = document.getElementById('sid');
+const sname = document.getElementById('sname');
+const sphone = document.getElementById('sphone');
+const semail = document.getElementById('semail');
+const saddr = document.getElementById('saddr');
+
 function openSup(s) {
     document.querySelector('#supModal form').reset();
     document.getElementById('smTitle').textContent = s ? 'Edit Supplier' : 'Add Supplier';

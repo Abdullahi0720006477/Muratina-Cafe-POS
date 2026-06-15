@@ -217,6 +217,17 @@ require __DIR__ . '/includes/header.php';
 const userModal = new bootstrap.Modal('#userModal');
 const resetModal = new bootstrap.Modal('#resetModal');
 let editing = false;
+
+const urole = document.getElementById('urole');
+const uname = document.getElementById('uname');
+const upass = document.getElementById('upass');
+const upin = document.getElementById('upin');
+const uid = document.getElementById('uid');
+const ufull = document.getElementById('ufull');
+const uemail = document.getElementById('uemail');
+const uphone = document.getElementById('uphone');
+const rid = document.getElementById('rid');
+
 function toggleRoleFields() {
     const isWaiter = urole.value === 'waiter';
     // Waiters: name + PIN only (username auto-generated, no password).

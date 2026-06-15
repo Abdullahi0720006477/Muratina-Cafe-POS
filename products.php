@@ -150,6 +150,20 @@ require __DIR__ . '/includes/header.php';
 
 <script>
 const productModal = new bootstrap.Modal('#productModal');
+
+const pid = document.getElementById('pid');
+const pname = document.getElementById('pname');
+const psku = document.getElementById('psku');
+const pbarcode = document.getElementById('pbarcode');
+const pcat = document.getElementById('pcat');
+const psup = document.getElementById('psup');
+const pbuy = document.getElementById('pbuy');
+const psell = document.getElementById('psell');
+const pstock = document.getElementById('pstock');
+const plow = document.getElementById('plow');
+const pexp = document.getElementById('pexp');
+const pexisting = document.getElementById('pexisting');
+
 function openProduct(p) {
     document.querySelector('#productModal form').reset();
     if (p) {

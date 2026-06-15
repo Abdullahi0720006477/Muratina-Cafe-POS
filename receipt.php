@@ -20,8 +20,8 @@ if (!$sale) {
     die('Receipt not found.');
 }
 
-// Cashiers may only view their own receipts.
-if (user_role() === 'cashier' && (int) $sale['user_id'] !== (int) current_user()['id']) {
+// Cashiers and waiters may only view their own receipts.
+if (in_array(user_role(), ['cashier', 'waiter'], true) && (int) $sale['user_id'] !== (int) current_user()['id']) {
     http_response_code(403);
     die('Access denied.');
 }

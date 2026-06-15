@@ -76,6 +76,11 @@ require __DIR__ . '/includes/header.php';
 
 <script>
 const catModal = new bootstrap.Modal('#catModal');
+
+const cid = document.getElementById('cid');
+const cname = document.getElementById('cname');
+const cicon = document.getElementById('cicon');
+
 function openCat(c) {
     document.querySelector('#catModal form').reset();
     document.getElementById('cmTitle').textContent = c ? 'Edit Category' : 'Add Category';

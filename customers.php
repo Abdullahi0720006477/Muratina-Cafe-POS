@@ -109,6 +109,12 @@ require __DIR__ . '/includes/header.php';
 
 <script>
 const custModal = new bootstrap.Modal('#custModal');
+
+const cuid = document.getElementById('cuid');
+const cuname = document.getElementById('cuname');
+const cuphone = document.getElementById('cuphone');
+const cuemail = document.getElementById('cuemail');
+
 function openCust(c) {
     document.querySelector('#custModal form').reset();
     document.getElementById('cumTitle').textContent = c ? 'Edit Customer' : 'Add Customer';
