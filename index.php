@@ -62,37 +62,13 @@ $set = settings();
 </head>
 <body>
 <div class="login-wrap">
-    <!-- Cinematic background: themed muted videos that cross-fade.
-         Drop your own clips in assets/videos/ (coffee.mp4, juice.mp4, meals.mp4);
-         the poster images are shown automatically if a video is missing. -->
+    <!-- Cinematic background using local vid1.mp4 -->
     <div class="login-bg" id="loginBg">
-        <div class="bg-scene active" data-caption="Freshly brewed coffee" data-icon="fa-mug-hot">
-            <video muted loop playsinline preload="auto"
-                   poster="https://images.unsplash.com/photo-1511920170033-f8396924c348?w=1600&q=80">
-                <source src="<?= BASE_URL ?>/assets/videos/coffee.mp4" type="video/mp4">
-                <source src="https://cdn.coverr.co/videos/coverr-pouring-coffee-3853/1080p.mp4" type="video/mp4">
-            </video>
-            <div class="bg-fallback slide-1"></div>
-        </div>
-        <div class="bg-scene" data-caption="Cold-pressed fruit juices" data-icon="fa-glass-water">
-            <video muted loop playsinline preload="none"
-                   poster="https://images.unsplash.com/photo-1622597467836-f3285f2131b8?w=1600&q=80">
-                <source src="<?= BASE_URL ?>/assets/videos/juice.mp4" type="video/mp4">
-                <source src="https://cdn.coverr.co/videos/coverr-making-fresh-orange-juice-5180/1080p.mp4" type="video/mp4">
-            </video>
-            <div class="bg-fallback slide-2"></div>
-        </div>
-        <div class="bg-scene" data-caption="Delicious meals, served fresh" data-icon="fa-bowl-food">
-            <video muted loop playsinline preload="none"
-                   poster="https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1600&q=80">
-                <source src="<?= BASE_URL ?>/assets/videos/meals.mp4" type="video/mp4">
-                <source src="https://cdn.coverr.co/videos/coverr-cooking-in-a-restaurant-2570/1080p.mp4" type="video/mp4">
-            </video>
-            <div class="bg-fallback slide-3"></div>
-        </div>
+        <video muted loop autoplay playsinline preload="auto" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;">
+            <source src="<?= BASE_URL ?>/video/vid1.mp4" type="video/mp4">
+        </video>
     </div>
     <div class="login-overlay"></div>
-    <div class="bg-caption" id="bgCaption"><i class="fa-solid fa-mug-hot"></i> <span>Freshly brewed coffee</span></div>
 
     <!-- POS terminal panel (YUMAPOS-style) -->
     <form method="post" class="pos-terminal" id="posForm" autocomplete="off">
@@ -146,9 +122,7 @@ $set = settings();
         </div>
     </form>
 
-    <div class="slide-dots">
-        <span class="active" data-i="0"></span><span data-i="1"></span><span data-i="2"></span>
-    </div>
+
 </div>
 
 <script>
@@ -188,30 +162,7 @@ document.getElementById('toggleMode').addEventListener('click', function (e) {
 });
 <?php if ($loginMode === 'staff'): ?>document.getElementById('toggleMode').click();<?php endif; ?>
 
-// ---- Cinematic background ----
-(function () {
-    const scenes = Array.from(document.querySelectorAll('.bg-scene'));
-    const dots = Array.from(document.querySelectorAll('.slide-dots span'));
-    const caption = document.getElementById('bgCaption');
-    let i = 0;
-    function show(n) {
-        i = (n + scenes.length) % scenes.length;
-        scenes.forEach((s, idx) => {
-            const on = idx === i; s.classList.toggle('active', on);
-            const v = s.querySelector('video'); if (v) { on ? v.play().catch(() => {}) : v.pause(); }
-        });
-        dots.forEach((d, idx) => d.classList.toggle('active', idx === i));
-        const sc = scenes[i];
-        caption.classList.remove('show');
-        setTimeout(() => {
-            caption.innerHTML = '<i class="fa-solid ' + sc.dataset.icon + '"></i> <span>' + sc.dataset.caption + '</span>';
-            caption.classList.add('show');
-        }, 350);
-    }
-    dots.forEach(d => d.addEventListener('click', () => show(+d.dataset.i)));
-    setInterval(() => show(i + 1), 7000);
-    show(0);
-})();
+
 </script>
 </body>
 </html>
