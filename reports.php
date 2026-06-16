@@ -5,6 +5,10 @@ require_permission('reports');
 $pdo = db();
 
 $type = $_GET['type'] ?? 'daily';
+if (user_role() === 'cashier' && $type === 'profit') {
+    http_response_code(403);
+    die('Access denied.');
+}
 $from = $_GET['from'] ?? date('Y-m-01');
 $to   = $_GET['to'] ?? date('Y-m-d');
 
@@ -15,24 +19,43 @@ $to   = $_GET['to'] ?? date('Y-m-d');
 function build_report(PDO $pdo, string $type, string $from, string $to): array
 {
     $range = [$from . ' 00:00:00', $to . ' 23:59:59'];
+    $role = user_role();
+    $userId = (int) current_user()['id'];
 
     switch ($type) {
         case 'product':
-            $rows = $pdo->prepare(
-                'SELECT si.product_name, SUM(si.qty) qty, SUM(si.line_total) revenue,
-                        SUM((si.price-si.cost)*si.qty) profit
-                 FROM sale_items si JOIN sales s ON s.id = si.sale_id
-                 WHERE s.created_at BETWEEN ? AND ?
-                 GROUP BY si.product_name ORDER BY revenue DESC');
-            $rows->execute($range);
-            return [['Product', 'Qty Sold', 'Revenue', 'Profit'], $rows->fetchAll(), 'Product Sales Report'];
+            if ($role === 'cashier') {
+                $rows = $pdo->prepare(
+                    'SELECT si.product_name, SUM(si.qty) qty, SUM(si.line_total) revenue
+                     FROM sale_items si JOIN sales s ON s.id = si.sale_id
+                     WHERE s.created_at BETWEEN ? AND ? AND s.user_id = ?
+                     GROUP BY si.product_name ORDER BY revenue DESC');
+                $rows->execute([$range[0], $range[1], $userId]);
+                return [['Product', 'Qty Sold', 'Revenue'], $rows->fetchAll(), 'Product Sales Report'];
+            } else {
+                $rows = $pdo->prepare(
+                    'SELECT si.product_name, SUM(si.qty) qty, SUM(si.line_total) revenue,
+                            SUM((si.price-si.cost)*si.qty) profit
+                     FROM sale_items si JOIN sales s ON s.id = si.sale_id
+                     WHERE s.created_at BETWEEN ? AND ?
+                     GROUP BY si.product_name ORDER BY revenue DESC');
+                $rows->execute($range);
+                return [['Product', 'Qty Sold', 'Revenue', 'Profit'], $rows->fetchAll(), 'Product Sales Report'];
+            }
 
         case 'inventory':
-            $rows = $pdo->query(
-                'SELECT p.name, c.name cat, p.stock_qty, p.low_stock, p.purchase_price,
-                        (p.stock_qty*p.purchase_price) value FROM products p
-                 LEFT JOIN categories c ON c.id=p.category_id WHERE p.is_active=1 ORDER BY p.name');
-            return [['Product', 'Category', 'Stock', 'Low Mark', 'Unit Cost', 'Stock Value'], $rows->fetchAll(), 'Inventory Report'];
+            if ($role === 'cashier') {
+                $rows = $pdo->query(
+                    'SELECT p.name, c.name cat, p.stock_qty, p.low_stock FROM products p
+                     LEFT JOIN categories c ON c.id=p.category_id WHERE p.is_active=1 ORDER BY p.name');
+                return [['Product', 'Category', 'Stock', 'Low Mark'], $rows->fetchAll(), 'Inventory Report'];
+            } else {
+                $rows = $pdo->query(
+                    'SELECT p.name, c.name cat, p.stock_qty, p.low_stock, p.purchase_price,
+                            (p.stock_qty*p.purchase_price) value FROM products p
+                     LEFT JOIN categories c ON c.id=p.category_id WHERE p.is_active=1 ORDER BY p.name');
+                return [['Product', 'Category', 'Stock', 'Low Mark', 'Unit Cost', 'Stock Value'], $rows->fetchAll(), 'Inventory Report'];
+            }
 
         case 'profit':
             $rows = $pdo->prepare(
@@ -44,36 +67,68 @@ function build_report(PDO $pdo, string $type, string $from, string $to): array
             return [['Date', 'Revenue', 'Cost', 'Profit'], $rows->fetchAll(), 'Profit Report'];
 
         case 'attendance':
-            $rows = $pdo->prepare(
-                "SELECT u.full_name, UPPER(a.type) action, DATE_FORMAT(a.created_at,'%Y-%m-%d') day,
-                        DATE_FORMAT(a.created_at,'%H:%i') time
-                 FROM attendance a JOIN users u ON u.id = a.user_id
-                 WHERE a.created_at BETWEEN ? AND ? ORDER BY a.created_at DESC");
-            $rows->execute($range);
+            if ($role === 'cashier') {
+                $rows = $pdo->prepare(
+                    "SELECT u.full_name, UPPER(a.type) action, DATE_FORMAT(a.created_at,'%Y-%m-%d') day,
+                            DATE_FORMAT(a.created_at,'%H:%i') time
+                     FROM attendance a JOIN users u ON u.id = a.user_id
+                     WHERE a.created_at BETWEEN ? AND ? AND a.user_id = ? ORDER BY a.created_at DESC");
+                $rows->execute([$range[0], $range[1], $userId]);
+            } else {
+                $rows = $pdo->prepare(
+                    "SELECT u.full_name, UPPER(a.type) action, DATE_FORMAT(a.created_at,'%Y-%m-%d') day,
+                            DATE_FORMAT(a.created_at,'%H:%i') time
+                     FROM attendance a JOIN users u ON u.id = a.user_id
+                     WHERE a.created_at BETWEEN ? AND ? ORDER BY a.created_at DESC");
+                $rows->execute($range);
+            }
             return [['Employee', 'Action', 'Date', 'Time'], $rows->fetchAll(), 'Attendance Report'];
 
         case 'cashier':
-            $rows = $pdo->prepare(
-                'SELECT u.full_name, COUNT(s.id) orders, SUM(s.total) sales
-                 FROM sales s JOIN users u ON u.id=s.user_id
-                 WHERE s.created_at BETWEEN ? AND ? GROUP BY u.id ORDER BY sales DESC');
-            $rows->execute($range);
+            if ($role === 'cashier') {
+                $rows = $pdo->prepare(
+                    'SELECT u.full_name, COUNT(s.id) orders, SUM(s.total) sales
+                     FROM sales s JOIN users u ON u.id=s.user_id
+                     WHERE s.created_at BETWEEN ? AND ? AND s.user_id = ? GROUP BY u.id ORDER BY sales DESC');
+                $rows->execute([$range[0], $range[1], $userId]);
+            } else {
+                $rows = $pdo->prepare(
+                    'SELECT u.full_name, COUNT(s.id) orders, SUM(s.total) sales
+                     FROM sales s JOIN users u ON u.id=s.user_id
+                     WHERE s.created_at BETWEEN ? AND ? GROUP BY u.id ORDER BY sales DESC');
+                $rows->execute($range);
+            }
             return [['Cashier', 'Orders', 'Total Sales'], $rows->fetchAll(), 'Cashier Performance'];
 
         case 'monthly':
-            $rows = $pdo->prepare(
-                "SELECT DATE_FORMAT(created_at,'%Y-%m') period, COUNT(*) orders, SUM(total) sales
-                 FROM sales WHERE created_at BETWEEN ? AND ? GROUP BY period ORDER BY period");
-            $rows->execute($range);
+            if ($role === 'cashier') {
+                $rows = $pdo->prepare(
+                    "SELECT DATE_FORMAT(created_at,'%Y-%m') period, COUNT(*) orders, SUM(total) sales
+                     FROM sales WHERE created_at BETWEEN ? AND ? AND user_id = ? GROUP BY period ORDER BY period");
+                $rows->execute([$range[0], $range[1], $userId]);
+            } else {
+                $rows = $pdo->prepare(
+                    "SELECT DATE_FORMAT(created_at,'%Y-%m') period, COUNT(*) orders, SUM(total) sales
+                     FROM sales WHERE created_at BETWEEN ? AND ? GROUP BY period ORDER BY period");
+                $rows->execute($range);
+            }
             return [['Month', 'Orders', 'Total Sales'], $rows->fetchAll(), 'Monthly Sales Report'];
 
         case 'daily':
         default:
-            $rows = $pdo->prepare(
-                'SELECT DATE(created_at) period, COUNT(*) orders, SUM(subtotal) subtotal,
-                        SUM(discount) discount, SUM(tax) tax, SUM(total) total
-                 FROM sales WHERE created_at BETWEEN ? AND ? GROUP BY DATE(created_at) ORDER BY period');
-            $rows->execute($range);
+            if ($role === 'cashier') {
+                $rows = $pdo->prepare(
+                    'SELECT DATE(created_at) period, COUNT(*) orders, SUM(subtotal) subtotal,
+                            SUM(discount) discount, SUM(tax) tax, SUM(total) total
+                     FROM sales WHERE created_at BETWEEN ? AND ? AND user_id = ? GROUP BY DATE(created_at) ORDER BY period');
+                $rows->execute([$range[0], $range[1], $userId]);
+            } else {
+                $rows = $pdo->prepare(
+                    'SELECT DATE(created_at) period, COUNT(*) orders, SUM(subtotal) subtotal,
+                            SUM(discount) discount, SUM(tax) tax, SUM(total) total
+                     FROM sales WHERE created_at BETWEEN ? AND ? GROUP BY DATE(created_at) ORDER BY period');
+                $rows->execute($range);
+            }
             return [['Date', 'Orders', 'Subtotal', 'Discount', 'Tax', 'Total'], $rows->fetchAll(), 'Daily Sales Report'];
     }
 }
@@ -116,9 +171,13 @@ require __DIR__ . '/includes/header.php';
 
 $reportTypes = [
     'daily' => 'Daily Sales', 'monthly' => 'Monthly Sales', 'product' => 'Product Sales',
-    'inventory' => 'Inventory', 'profit' => 'Profit', 'cashier' => 'Cashier Performance',
-    'attendance' => 'Attendance',
+    'inventory' => 'Inventory',
 ];
+if (user_role() !== 'cashier') {
+    $reportTypes['profit'] = 'Profit';
+}
+$reportTypes['cashier'] = 'Cashier Performance';
+$reportTypes['attendance'] = 'Attendance';
 $qs = fn(array $extra) => '?' . http_build_query(array_merge(['type' => $type, 'from' => $from, 'to' => $to], $extra));
 ?>
 <div class="card mb-3"><div class="card-body">
@@ -141,6 +200,14 @@ $qs = fn(array $extra) => '?' . http_build_query(array_merge(['type' => $type, '
         <a class="btn btn-outline-secondary btn-sm" href="<?= $qs(['export' => 'csv']) ?>"><i class="fa-solid fa-file-csv"></i> CSV</a>
         <a class="btn btn-outline-secondary btn-sm" href="<?= $qs(['export' => 'excel']) ?>"><i class="fa-solid fa-file-excel"></i> Excel</a>
         <a class="btn btn-outline-secondary btn-sm" href="<?= $qs(['export' => 'pdf']) ?>" target="_blank"><i class="fa-solid fa-file-pdf"></i> PDF</a>
+        <?php
+        $reportUrl = (empty($_SERVER['HTTPS']) ? 'http' : 'https') . "://" . ($_SERVER['HTTP_HOST'] ?? 'localhost:8000') . $_SERVER['REQUEST_URI'];
+        $waText = urlencode(($set['company_name'] ?? 'Muratina Café') . " — " . $title . " (" . $from . " to " . $to . "): " . $reportUrl);
+        $mailSub = urlencode($title . " — " . ($set['company_name'] ?? 'Muratina Café'));
+        $mailBody = urlencode("Please view the generated report here:\n" . $reportUrl);
+        ?>
+        <a class="btn btn-success btn-sm" href="https://wa.me/?text=<?= $waText ?>" target="_blank"><i class="fa-brands fa-whatsapp"></i> WhatsApp</a>
+        <a class="btn btn-outline-primary btn-sm" href="mailto:?subject=<?= $mailSub ?>&body=<?= $mailBody ?>"><i class="fa-solid fa-envelope"></i> Email</a>
     </div>
 </div>
 

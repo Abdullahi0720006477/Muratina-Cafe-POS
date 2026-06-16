@@ -50,7 +50,7 @@ function can(string $permission): bool
     $role = user_role();
     $matrix = [
         'manager'   => ['*'],
-        'cashier'   => ['pos', 'sales_own', 'customers', 'receipt'],
+        'cashier'   => ['pos', 'sales_own', 'customers', 'receipt', 'reports'],
         'waiter'    => ['pos', 'sales_own', 'customers', 'receipt'],
         'inventory' => ['inventory', 'products', 'suppliers', 'stock', 'customers'],
     ];
