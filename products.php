@@ -98,7 +98,19 @@ require __DIR__ . '/includes/header.php';
     <tbody>
     <?php foreach ($products as $p): ?>
         <tr>
-            <td><strong><?= e($p['name']) ?></strong><br><small class="text-muted"><?= e($p['supplier'] ?? '') ?></small></td>
+            <td>
+                <div class="d-flex align-items-center gap-2">
+                    <?php if (!empty($p['image'])): ?>
+                        <img src="<?= BASE_URL ?>/<?= e($p['image']) ?>" alt="<?= e($p['name']) ?>" class="rounded" style="width:40px;height:40px;object-fit:cover;border: 1px solid var(--border)">
+                    <?php else: ?>
+                        <div class="rounded bg-secondary text-white d-flex align-items-center justify-content-center" style="width:40px;height:40px;font-size:1.2rem;border: 1px solid var(--border);background:var(--brand-grad) !important"><i class="fa-solid fa-mug-hot"></i></div>
+                    <?php endif; ?>
+                    <div>
+                        <strong><?= e($p['name']) ?></strong><br>
+                        <small class="text-muted"><?= e($p['supplier'] ?? '') ?></small>
+                    </div>
+                </div>
+            </td>
             <td><?= e($p['sku']) ?></td>
             <td><?= e($p['cat'] ?? '—') ?></td>
             <td><?= money($p['purchase_price']) ?></td>

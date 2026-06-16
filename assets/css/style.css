@@ -200,6 +200,12 @@ body {
     background: var(--brand-grad); display: grid; place-items: center;
     color: #fff; font-size: 1.6rem;
 }
+.product-tile .p-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 10px;
+}
 .product-tile .p-name { font-weight: 600; font-size: .85rem; line-height: 1.2; }
 .product-tile .p-price { color: var(--brand); font-weight: 700; margin-top: .25rem; }
 .product-tile.out { opacity: .55; pointer-events: none; }

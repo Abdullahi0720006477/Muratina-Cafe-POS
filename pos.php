@@ -5,7 +5,7 @@ require_permission('pos');
 $pdo = db();
 $categories = $pdo->query('SELECT * FROM categories ORDER BY name')->fetchAll();
 $products   = $pdo->query(
-    'SELECT id, name, selling_price, stock_qty, category_id FROM products WHERE is_active=1 ORDER BY name'
+    'SELECT id, name, selling_price, stock_qty, category_id, image FROM products WHERE is_active=1 ORDER BY name'
 )->fetchAll();
 $customers  = $pdo->query('SELECT id, name FROM customers ORDER BY name')->fetchAll();
 $taxRate    = (float) (settings()['tax_rate'] ?? 0);
@@ -88,9 +88,10 @@ const POS = {
         g.innerHTML = list.map(p => {
             const out = p.stock_qty <= 0;
             const low = p.stock_qty > 0 && p.stock_qty <= 5;
+            const imgHtml = p.image ? `<img src="${window.BASE_URL}/${p.image}" alt="${p.name}">` : `<i class="fa-solid fa-mug-hot"></i>`;
             return `<div class="product-tile ${out ? 'out' : ''}" onclick="POS.add(${p.id})">
                 <span class="stock-tag badge-soft ${out ? 'badge-low' : (low ? 'badge-warn' : 'badge-ok')}">${out ? 'Out' : p.stock_qty + ' left'}</span>
-                <div class="p-thumb"><i class="fa-solid fa-mug-hot"></i></div>
+                <div class="p-thumb">${imgHtml}</div>
                 <div class="p-name">${p.name}</div>
                 <div class="p-price">${fmtMoney(p.selling_price)}</div>
             </div>`;
