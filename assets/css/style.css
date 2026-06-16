@@ -202,6 +202,7 @@ body {
     height: 70px; border-radius: 10px; margin-bottom: .55rem;
     background: var(--brand-grad); display: grid; place-items: center;
     color: #fff; font-size: 1.6rem;
+    overflow: hidden;
 }
 .product-tile .p-thumb img {
     width: 100%;

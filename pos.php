@@ -15,13 +15,18 @@ $pageTitle = 'POS Sales';
 $activeNav = 'pos';
 require __DIR__ . '/includes/header.php';
 ?>
-<script>window.CSRF = "<?= csrf_token() ?>"; window.TAX_RATE = <?= $taxRate ?>;</script>
+<script>window.CSRF = "<?= csrf_token() ?>"; window.TAX_RATE = <?= $taxRate ?>; window.CAN_EDIT_PRODUCTS = <?= (user_role() === 'manager' || user_role() === 'cashier') ? 'true' : 'false' ?>;</script>
 
 <div class="pos-layout">
     <!-- Products -->
     <div>
         <div class="d-flex gap-2 mb-3">
             <input type="text" id="posSearch" class="form-control" placeholder="🔍 Search product or scan barcode…">
+            <?php if (user_role() === 'manager' || user_role() === 'cashier'): ?>
+                <button type="button" class="btn btn-brand" onclick="POS.openAddProductModal()" style="white-space: nowrap;">
+                    <i class="fa-solid fa-plus"></i> Add Product
+                </button>
+            <?php endif; ?>
         </div>
         <div class="pos-cats" id="posCats">
             <button class="cat-pill active" data-cat="all">All</button>
@@ -106,12 +111,15 @@ const POS = {
         g.innerHTML = list.map(p => {
             const out = p.stock_qty <= 0;
             const low = p.stock_qty > 0 && p.stock_qty <= 5;
-            const imgHtml = p.image ? `<img src="${window.BASE_URL}/${p.image}" alt="${p.name}">` : `<i class="fa-solid fa-mug-hot"></i>`;
+            const imgUrl = p.image ? (window.BASE_URL ? window.BASE_URL + '/' + p.image : p.image) : '';
+            const imgHtml = imgUrl ? `<img src="${imgUrl}" alt="${p.name}">` : `<i class="fa-solid fa-mug-hot"></i>`;
+            const editBtn = window.CAN_EDIT_PRODUCTS ? `<button type="button" class="btn btn-xs btn-light position-absolute border-0 p-0" style="bottom:.5rem; right:.5rem; z-index:5; font-size:0.75rem; border-radius:50%; width:24px; height:24px; display:grid; place-items:center;" onclick="event.stopPropagation(); POS.quickEdit(${p.id})"><i class="fa-solid fa-pen text-muted"></i></button>` : '';
             return `<div class="product-tile ${out ? 'out' : ''}" onclick="POS.add(${p.id})">
                 <span class="stock-tag badge-soft ${out ? 'badge-low' : (low ? 'badge-warn' : 'badge-ok')}">${out ? 'Out' : p.stock_qty + ' left'}</span>
                 <div class="p-thumb">${imgHtml}</div>
                 <div class="p-name">${p.name}</div>
                 <div class="p-price">${fmtMoney(p.selling_price)}</div>
+                ${editBtn}
             </div>`;
         }).join('') || '<p class="text-muted">No products found.</p>';
     },
@@ -168,11 +176,18 @@ const POS = {
                 <div class="cart-row">
                     <div style="flex:1">
                         <div class="ci-name">${i.name}</div>
-                        <div class="ci-price">${fmtMoney(i.price)} × ${i.qty} = ${fmtMoney(i.price * i.qty)}</div>
+                        <div class="ci-price-edit d-flex align-items-center gap-1 mt-1">
+                            <span class="small text-muted" style="font-size:0.75rem;">KSh</span>
+                            <input type="number" class="form-control form-control-sm py-0 px-1 text-start" style="width:70px;height:22px;font-size:0.78rem;font-weight:600;" value="${i.price}" oninput="POS.updateCartPrice(${i.id}, this.value)">
+                            <span class="small text-muted ms-1" style="font-size:0.75rem;">× ${i.qty} = ${fmtMoney(i.price * i.qty)}</span>
+                        </div>
                     </div>
-                    <button class="qty-btn" onclick="POS.setQty(${i.id},-1)">−</button>
-                    <span class="qty-val">${i.qty}</span>
-                    <button class="qty-btn" onclick="POS.setQty(${i.id},1)">+</button>
+                    <div class="d-flex align-items-center gap-1">
+                        <button class="qty-btn" onclick="POS.setQty(${i.id},-1)">−</button>
+                        <span class="qty-val">${i.qty}</span>
+                        <button class="qty-btn" onclick="POS.setQty(${i.id},1)">+</button>
+                        <button class="btn btn-sm btn-outline-danger py-1 px-2 ms-2" style="font-size:0.75rem;" onclick="POS.removeCartItem(${i.id})"><i class="fa-solid fa-trash"></i></button>
+                    </div>
                 </div>`).join('');
         }
         const t = this.totals();
@@ -184,6 +199,19 @@ const POS = {
         if (this.waiterId) {
             document.getElementById('waiterCommAmt').textContent = fmtMoney(t.commission);
         }
+    },
+
+    updateCartPrice(id, price) {
+        const it = this.cart.find(x => x.id == id);
+        if (!it) return;
+        const val = parseFloat(price);
+        it.price = isNaN(val) || val < 0 ? 0 : val;
+        this.render();
+    },
+
+    removeCartItem(id) {
+        this.cart = this.cart.filter(x => x.id != id);
+        this.render();
     },
 
     openWaiterModal() {
@@ -213,6 +241,157 @@ const POS = {
         const statusBox = document.getElementById('assignedWaiterStatus');
         if (statusBox) statusBox.classList.add('d-none');
         this.render();
+    },
+
+    quickEdit(id) {
+        const p = PRODUCTS.find(x => x.id == id);
+        if (!p) return;
+        
+        document.getElementById('qeId').value = p.id;
+        document.getElementById('qeName').value = p.name;
+        document.getElementById('qePrice').value = p.selling_price;
+        document.getElementById('qeImage').value = '';
+        
+        const qeModal = new bootstrap.Modal(document.getElementById('quickEditProductModal'));
+        qeModal.show();
+    },
+
+    saveQuickEdit(e) {
+        e.preventDefault();
+        const form = document.getElementById('quickEditProductForm');
+        const fd = new FormData(form);
+        
+        const btn = form.querySelector('button[type="submit"]');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving...';
+        
+        fetch(BASE_URL + '/api/quick_edit_product.php', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': window.CSRF },
+            body: fd
+        })
+        .then(r => r.json())
+        .then(res => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            if (res.ok) {
+                const p = PRODUCTS.find(x => x.id == res.id);
+                if (p) {
+                    p.selling_price = res.selling_price;
+                    p.image = res.image;
+                }
+                
+                const inCart = this.cart.find(x => x.id == res.id);
+                if (inCart) {
+                    inCart.price = res.selling_price;
+                }
+                
+                const m = bootstrap.Modal.getInstance(document.getElementById('quickEditProductModal'));
+                if (m) m.hide();
+                
+                this.grid();
+                this.render();
+            } else {
+                alert(res.error || 'Failed to update product.');
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            alert('Network error.');
+        });
+    },
+
+    openAddProductModal() {
+        document.getElementById('addProductForm').reset();
+        const m = new bootstrap.Modal(document.getElementById('addProductModal'));
+        m.show();
+    },
+
+    saveNewProduct(e) {
+        e.preventDefault();
+        const form = document.getElementById('addProductForm');
+        const fd = new FormData(form);
+        
+        const btn = form.querySelector('button[type="submit"]');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving...';
+        
+        fetch(BASE_URL + '/api/quick_edit_product.php', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': window.CSRF },
+            body: fd
+        })
+        .then(r => r.json())
+        .then(res => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            if (res.ok && res.added) {
+                // Add to local PRODUCTS list
+                PRODUCTS.push({
+                    id: res.product.id,
+                    name: res.product.name,
+                    selling_price: res.product.selling_price,
+                    stock_qty: res.product.stock_qty,
+                    category_id: res.product.category_id,
+                    image: res.product.image
+                });
+                
+                const m = bootstrap.Modal.getInstance(document.getElementById('addProductModal'));
+                if (m) m.hide();
+                
+                this.grid();
+            } else {
+                alert(res.error || 'Failed to add product.');
+            }
+        })
+        .catch(err => {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            alert('Network error.');
+        });
+    },
+
+    deleteProduct() {
+        const id = document.getElementById('qeId').value;
+        if (!id) return;
+        if (!confirm('Are you sure you want to delete/deactivate this product from the POS?')) return;
+        
+        const fd = new FormData();
+        fd.append('id', id);
+        fd.append('action', 'delete');
+        fd.append('csrf', window.CSRF);
+        
+        fetch(BASE_URL + '/api/quick_edit_product.php', {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': window.CSRF },
+            body: fd
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.ok && res.deleted) {
+                // Remove from PRODUCTS
+                const idx = PRODUCTS.findIndex(p => p.id == id);
+                if (idx !== -1) {
+                    PRODUCTS.splice(idx, 1);
+                }
+                // Remove from cart
+                this.cart = this.cart.filter(x => x.id != id);
+                
+                const m = bootstrap.Modal.getInstance(document.getElementById('quickEditProductModal'));
+                if (m) m.hide();
+                
+                this.grid();
+                this.render();
+            } else {
+                alert(res.error || 'Failed to delete product.');
+            }
+        })
+        .catch(err => {
+            alert('Network error.');
+        });
     },
 
     onCustomerChange() {
@@ -451,6 +630,99 @@ POS.grid(); POS.onCustomerChange();
           <?php endif; ?>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Edit Product Modal -->
+<div class="modal fade" id="quickEditProductModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:380px;">
+    <div class="modal-content glass" style="border: 1px solid var(--border); border-radius: 20px; background: rgba(var(--surface-rgb), 0.85); backdrop-filter: blur(12px);">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold" style="color:var(--brand);"><i class="fa-solid fa-pen-to-square me-2"></i> Edit Product</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="quickEditProductForm" onsubmit="POS.saveQuickEdit(event)" enctype="multipart/form-data">
+        <div class="modal-body pt-2 text-start">
+          <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+          <input type="hidden" name="id" id="qeId">
+          
+          <div class="mb-3">
+            <label class="form-label text-muted small fw-bold">Product Name</label>
+            <input type="text" id="qeName" class="form-control" readonly style="background: rgba(var(--surface-rgb), 0.5); border-color: var(--border);">
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label text-muted small fw-bold">Selling Price (KSh) *</label>
+            <input type="number" step="0.01" name="selling_price" id="qePrice" class="form-control" required min="0">
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label text-muted small fw-bold">Update Product Image</label>
+            <input type="file" name="image" id="qeImage" class="form-control" accept="image/*">
+            <small class="text-muted text-start d-block mt-1" style="font-size:0.75rem;">Leave blank to keep current image.</small>
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <?php if (user_role() === 'manager' || user_role() === 'cashier'): ?>
+            <button type="button" class="btn btn-sm btn-outline-danger me-auto" onclick="POS.deleteProduct()"><i class="fa-solid fa-trash"></i> Delete Product</button>
+          <?php endif; ?>
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-brand"><i class="fa-solid fa-floppy-disk"></i> Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Add Product Modal -->
+<div class="modal fade" id="addProductModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:380px;">
+    <div class="modal-content glass" style="border: 1px solid var(--border); border-radius: 20px; background: rgba(var(--surface-rgb), 0.85); backdrop-filter: blur(12px);">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold" style="color:var(--brand);"><i class="fa-solid fa-plus me-2"></i> Add Product</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="addProductForm" onsubmit="POS.saveNewProduct(event)" enctype="multipart/form-data">
+        <div class="modal-body pt-2 text-start">
+          <input type="hidden" name="csrf" value="<?= csrf_token() ?>">
+          <input type="hidden" name="action" value="add">
+          
+          <div class="mb-3">
+            <label class="form-label text-muted small fw-bold">Product Name *</label>
+            <input type="text" name="name" id="apName" class="form-control" required placeholder="e.g. Mixed Berry Smoothie">
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label text-muted small fw-bold">Category *</label>
+            <select name="category_id" id="apCategory" class="form-select" required>
+              <option value="">Select Category...</option>
+              <?php foreach ($categories as $c): ?>
+                <option value="<?= $c['id'] ?>"><?= e($c['name']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label text-muted small fw-bold">Selling Price (KSh) *</label>
+            <input type="number" step="0.01" name="selling_price" id="apPrice" class="form-control" required min="0" placeholder="0.00">
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label text-muted small fw-bold">Initial Stock Qty *</label>
+            <input type="number" name="stock_qty" id="apStock" class="form-control" required min="0" value="100">
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label text-muted small fw-bold">Product Image</label>
+            <input type="file" name="image" id="apImage" class="form-control" accept="image/*">
+          </div>
+        </div>
+        <div class="modal-footer border-0 pt-0">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-brand"><i class="fa-solid fa-floppy-disk"></i> Save Product</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
