@@ -629,6 +629,9 @@ POS.grid(); POS.onCustomerChange();
             <p class="text-muted text-center py-3">No active waiters registered.</p>
           <?php endif; ?>
         </div>
+        <button type="button" class="btn btn-sm btn-outline-danger w-100 mt-3" onclick="POS.clearWaiter(); const m = bootstrap.Modal.getInstance(document.getElementById('waiterModal')); if (m) m.hide();">
+            <i class="fa-solid fa-ban"></i> No Commission / Clear Waiter
+        </button>
       </div>
     </div>
   </div>

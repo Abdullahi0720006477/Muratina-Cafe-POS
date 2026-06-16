@@ -10,8 +10,9 @@ $pdo = db();
 $no  = trim($_GET['no'] ?? '');
 
 $stmt = $pdo->prepare(
-    'SELECT s.*, u.full_name cashier, u.role served_role, c.name customer FROM sales s
+    'SELECT s.*, u.full_name cashier, u.role served_role, w.full_name waiter_name, c.name customer FROM sales s
      LEFT JOIN users u ON u.id = s.user_id
+     LEFT JOIN users w ON w.id = s.waiter_id
      LEFT JOIN customers c ON c.id = s.customer_id WHERE s.receipt_no = ? LIMIT 1'
 );
 $stmt->execute([$no]);
@@ -52,7 +53,9 @@ td { padding: 2px 0; font-weight: 700; vertical-align: top; }
 <table>
 <tr><td>Receipt</td><td class="r"><?= e($sale['receipt_no']) ?></td></tr>
 <tr><td>Date</td><td class="r"><?= e(date('d M Y H:i', strtotime($sale['created_at']))) ?></td></tr>
-<tr><td>Served by</td><td class="r"><?= e($sale['cashier'] ?? '—') ?><?= $sale['served_role'] ? ' (' . e(ucfirst($sale['served_role'])) . ')' : '' ?></td></tr>
+<?php if (!empty($sale['waiter_name'])): ?>
+<tr><td>Served by</td><td class="r"><?= e($sale['waiter_name']) ?> (Waiter)</td></tr>
+<?php endif; ?>
 <tr><td>Customer</td><td class="r"><?= e($sale['customer'] ?? 'Walk-in') ?></td></tr>
 </table><div class="line"></div>
 <table class="big">
@@ -67,6 +70,11 @@ td { padding: 2px 0; font-weight: 700; vertical-align: top; }
 <tr class="tot"><td>TOTAL</td><td class="r"><?= money($sale['total']) ?></td></tr>
 <tr><td>Paid via</td><td class="r"><?= e($sale['payment_method']) ?></td></tr>
 </table><div class="line"></div>
+<?php if (!empty($sale['waiter_name']) && $sale['commission_amount'] > 0): ?>
+<table>
+<tr><td>Waiter Commission (<?= (float)$sale['commission_rate'] ?>%)</td><td class="r"><?= money($sale['commission_amount']) ?></td></tr>
+</table><div class="line"></div>
+<?php endif; ?>
 <div class="c"><?= e($set['receipt_footer'] ?? 'Thank you!') ?></div>
 <div class="c">&nbsp;</div>
 <div class="c">* * *</div>

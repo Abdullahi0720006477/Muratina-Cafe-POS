@@ -6,9 +6,10 @@ $pdo = db();
 $no  = trim($_GET['no'] ?? '');
 
 $stmt = $pdo->prepare(
-    'SELECT s.*, u.full_name cashier, u.role served_role, c.name customer
+    'SELECT s.*, u.full_name cashier, u.role served_role, w.full_name waiter_name, c.name customer
      FROM sales s
      LEFT JOIN users u ON u.id = s.user_id
+     LEFT JOIN users w ON w.id = s.waiter_id
      LEFT JOIN customers c ON c.id = s.customer_id
      WHERE s.receipt_no = ? LIMIT 1'
 );
@@ -64,7 +65,9 @@ $set = settings();
     <table>
         <tr><td>Receipt #</td><td style="text-align:right"><?= e($sale['receipt_no']) ?></td></tr>
         <tr><td>Date</td><td style="text-align:right"><?= e(date('d M Y H:i', strtotime($sale['created_at']))) ?></td></tr>
-        <tr><td>Served by</td><td style="text-align:right"><?= e($sale['cashier'] ?? '—') ?><?= $sale['served_role'] ? ' (' . e(ucfirst($sale['served_role'])) . ')' : '' ?></td></tr>
+        <?php if (!empty($sale['waiter_name'])): ?>
+            <tr><td>Served by</td><td style="text-align:right"><?= e($sale['waiter_name']) ?> (Waiter)</td></tr>
+        <?php endif; ?>
         <tr><td>Customer</td><td style="text-align:right"><?= e($sale['customer'] ?? 'Walk-in') ?></td></tr>
     </table>
     <div class="r-line"></div>
@@ -92,6 +95,14 @@ $set = settings();
         <tr style="font-size:1.1em;font-weight:bold"><td>TOTAL</td><td style="text-align:right"><?= money($sale['total']) ?></td></tr>
         <tr><td>Payment</td><td style="text-align:right"><?= e($sale['payment_method']) ?></td></tr>
     </table>
+    
+    <?php if (!empty($sale['waiter_name']) && $sale['commission_amount'] > 0): ?>
+        <div class="r-line"></div>
+        <table>
+            <tr><td>Waiter Commission (<?= (float)$sale['commission_rate'] ?>%)</td><td style="text-align:right"><?= money($sale['commission_amount']) ?></td></tr>
+        </table>
+    <?php endif; ?>
+    
     <div class="r-line"></div>
     <div class="r-center"><?= e($set['receipt_footer'] ?? 'Thank you!') ?></div>
     <div class="r-center" style="margin-top:.5rem">★ ★ ★</div>
