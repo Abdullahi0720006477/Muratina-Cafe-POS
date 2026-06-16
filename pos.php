@@ -8,6 +8,7 @@ $products   = $pdo->query(
     'SELECT id, name, selling_price, stock_qty, category_id, image FROM products WHERE is_active=1 ORDER BY name'
 )->fetchAll();
 $customers  = $pdo->query('SELECT id, name, loyalty_points, phone FROM customers ORDER BY name')->fetchAll();
+$waiters    = $pdo->query("SELECT id, full_name FROM users WHERE role='waiter' AND is_active=1 ORDER BY full_name")->fetchAll();
 $taxRate    = (float) (settings()['tax_rate'] ?? 0);
 
 $pageTitle = 'POS Sales';
@@ -57,6 +58,16 @@ require __DIR__ . '/includes/header.php';
                     <button type="button" class="btn btn-xs btn-outline-warning ms-2 py-0 px-2" style="font-size:0.75rem;" id="btnRedeem" onclick="POS.redeem()">Redeem</button>
                 </div>
             </div>
+            <div class="mb-2">
+                <button type="button" class="btn btn-sm btn-outline-brand w-100" onclick="POS.openWaiterModal()">
+                    <i class="fa-solid fa-user-tag"></i> Assign Waiter (Commission)
+                </button>
+                <div id="assignedWaiterStatus" class="mt-1 small text-muted d-none" style="font-weight: 600;">
+                    <i class="fa-solid fa-circle-check text-success"></i> Waiter: <span id="waiterName">None</span> 
+                    (<span id="waiterCommRate">0</span>% Comm: <strong id="waiterCommAmt">KSh 0.00</strong>)
+                    <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-2" style="font-size:0.75rem; text-decoration:none;" onclick="POS.clearWaiter()">[Remove]</button>
+                </div>
+            </div>
             <div class="cart-line"><span>Subtotal</span><span id="cSubtotal"><?= money(0) ?></span></div>
             <div class="cart-line">
                 <span>Discount</span>
@@ -85,6 +96,7 @@ const POS = {
     cart: [], category: 'all', search: '', payment: 'Cash',
     customerPoints: 0, customerPhone: '', redeemedPoints: 0,
     mpesaPhone: '', mpesaTxId: '',
+    waiterId: null, waiterName: '', commissionRate: 0,
 
     grid() {
         const g = document.getElementById('productGrid');
@@ -133,6 +145,7 @@ const POS = {
             btn.classList.remove('btn-warning');
             btn.classList.add('btn-outline-warning');
         }
+        this.clearWaiter();
         this.render();
     },
 
@@ -141,7 +154,9 @@ const POS = {
         let disc = Math.min(parseFloat(document.getElementById('cDiscount').value) || 0, sub);
         const totalDisc = Math.min(disc + this.redeemedPoints, sub);
         const tax = (sub - totalDisc) * (window.TAX_RATE / 100);
-        return { sub, disc, tax, total: sub - totalDisc + tax, totalDisc };
+        const total = sub - totalDisc + tax;
+        const commission = this.waiterId ? Math.round((sub - totalDisc) * this.commissionRate / 100 * 100) / 100 : 0;
+        return { sub, disc, tax, total, totalDisc, commission };
     },
 
     render() {
@@ -165,6 +180,39 @@ const POS = {
         document.getElementById('cTax').textContent = fmtMoney(t.tax);
         document.getElementById('cTotal').textContent = fmtMoney(t.total);
         document.getElementById('chargeAmt').textContent = fmtMoney(t.total);
+        
+        if (this.waiterId) {
+            document.getElementById('waiterCommAmt').textContent = fmtMoney(t.commission);
+        }
+    },
+
+    openWaiterModal() {
+        const modal = new bootstrap.Modal(document.getElementById('waiterModal'));
+        modal.show();
+    },
+
+    selectWaiter(id, name, rate) {
+        this.waiterId = id;
+        this.waiterName = name;
+        this.commissionRate = rate;
+        
+        document.getElementById('waiterName').textContent = name;
+        document.getElementById('waiterCommRate').textContent = rate;
+        document.getElementById('assignedWaiterStatus').classList.remove('d-none');
+        
+        const m = bootstrap.Modal.getInstance(document.getElementById('waiterModal'));
+        if (m) m.hide();
+        
+        this.render();
+    },
+
+    clearWaiter() {
+        this.waiterId = null;
+        this.waiterName = '';
+        this.commissionRate = 0;
+        const statusBox = document.getElementById('assignedWaiterStatus');
+        if (statusBox) statusBox.classList.add('d-none');
+        this.render();
     },
 
     onCustomerChange() {
@@ -295,7 +343,9 @@ const POS = {
             redeemed_points: this.redeemedPoints,
             payment_method: this.payment,
             customer_id: document.getElementById('customerSelect').value,
-            note: note
+            note: note,
+            waiter_id: this.waiterId,
+            commission_rate: this.commissionRate
         }).then(res => {
             if (res.ok) {
                 window.open(BASE_URL + '/receipt.php?no=' + encodeURIComponent(res.receipt_no), '_blank');
@@ -370,6 +420,35 @@ POS.grid(); POS.onCustomerChange();
             <h6 class="fw-bold text-success">Payment Confirmed!</h6>
             <p class="text-muted small mb-3">Transaction ID: <code id="mpesaTxId">MPESA-XXX</code></p>
             <button type="button" class="btn btn-brand w-100" onclick="POS.finalizeMpesaCheckout()">Complete Order</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Waiter Commission Modal -->
+<div class="modal fade" id="waiterModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:380px;">
+    <div class="modal-content glass" style="border: 1px solid var(--border); border-radius: 20px; background: rgba(var(--surface-rgb), 0.85); backdrop-filter: blur(12px);">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold" style="color:var(--brand);"><i class="fa-solid fa-user-tag me-2"></i> Assign Waiter</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-2">
+        <p class="text-muted small">Select a waiter and the commission rate for this sale:</p>
+        <div class="list-group">
+          <?php foreach ($waiters as $w): ?>
+            <div class="list-group-item d-flex justify-content-between align-items-center bg-transparent border-0 px-0 py-2 border-bottom" style="border-color: var(--border) !important;">
+              <span class="fw-bold text-start" style="color: var(--text);"><?= e($w['full_name']) ?></span>
+              <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-brand py-1 px-3" onclick="POS.selectWaiter(<?= $w['id'] ?>, '<?= e(addslashes($w['full_name'])) ?>', 2)">2%</button>
+                <button type="button" class="btn btn-outline-brand py-1 px-3" onclick="POS.selectWaiter(<?= $w['id'] ?>, '<?= e(addslashes($w['full_name'])) ?>', 5)">5%</button>
+              </div>
+            </div>
+          <?php endforeach; ?>
+          <?php if (empty($waiters)): ?>
+            <p class="text-muted text-center py-3">No active waiters registered.</p>
+          <?php endif; ?>
         </div>
       </div>
     </div>

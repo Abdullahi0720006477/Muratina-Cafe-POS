@@ -162,6 +162,9 @@ body {
 /* ---------- Buttons ---------- */
 .btn-brand { background: var(--brand-grad); color: #fff; border: none; font-weight: 600; }
 .btn-brand:hover { color: #fff; filter: brightness(1.05); }
+.btn-outline-brand { color: var(--brand); border: 1px solid var(--brand); background: transparent; font-weight: 600; }
+.btn-outline-brand:hover { color: #fff; background: var(--brand-grad); border-color: transparent; }
+
 
 .form-control, .form-select {
     background: var(--surface-2); border-color: var(--border); color: var(--text);

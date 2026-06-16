@@ -18,10 +18,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $pdo->prepare(
-        'UPDATE settings SET company_name=?, logo=?, currency=?, tax_rate=?, address=?, phone=?, email=?, receipt_footer=? WHERE id=1'
+        'UPDATE settings SET company_name=?, logo=?, currency=?, tax_rate=?, address=?, phone=?, email=?, receipt_footer=?, primary_color=?, secondary_color=?, theme_mode=? WHERE id=1'
     )->execute([
         trim($_POST['company_name']), $logo, trim($_POST['currency']), (float) $_POST['tax_rate'],
         trim($_POST['address']), trim($_POST['phone']), trim($_POST['email']), trim($_POST['receipt_footer']),
+        trim($_POST['primary_color']), trim($_POST['secondary_color']), trim($_POST['theme_mode']),
     ]);
     audit('settings_update', 'Company settings updated');
     flash('Settings saved.');
@@ -53,6 +54,22 @@ require __DIR__ . '/includes/header.php';
             <input name="address" class="form-control" value="<?= e($s['address'] ?? '') ?>"></div>
         <div class="col-12"><label class="form-label">Receipt Footer Message</label>
             <input name="receipt_footer" class="form-control" value="<?= e($s['receipt_footer'] ?? '') ?>"></div>
+        
+        <hr class="my-4">
+        <h5 class="fw-bold" style="color:var(--brand);"><i class="fa-solid fa-palette"></i> Theme & Color Customization</h5>
+        
+        <div class="col-md-4"><label class="form-label">Theme Mode</label>
+            <select name="theme_mode" class="form-select">
+                <option value="dark" <?= ($s['theme_mode'] ?? 'dark') === 'dark' ? 'selected' : '' ?>>Dark Theme</option>
+                <option value="light" <?= ($s['theme_mode'] ?? 'dark') === 'light' ? 'selected' : '' ?>>Light Theme</option>
+            </select></div>
+        <div class="col-md-4"><label class="form-label">Primary Brand Color</label>
+            <input type="color" name="primary_color" class="form-control form-control-color w-100" value="<?= e($s['primary_color'] ?? '#b5651d') ?>"></div>
+        <div class="col-md-4"><label class="form-label">Secondary Brand Color</label>
+            <input type="color" name="secondary_color" class="form-control form-control-color w-100" value="<?= e($s['secondary_color'] ?? '#e09f3e') ?>"></div>
+
+        <hr class="my-4">
+
         <div class="col-md-6"><label class="form-label">Company Logo</label>
             <input type="file" name="logo" class="form-control" accept="image/*">
             <?php if (!empty($s['logo'])): ?><small class="text-muted">Current: <?= e($s['logo']) ?></small><?php endif; ?></div>

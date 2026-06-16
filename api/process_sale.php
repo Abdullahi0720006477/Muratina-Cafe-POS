@@ -22,6 +22,8 @@ $redeemedPoints = max(0, (int) ($input['redeemed_points'] ?? 0));
 $method         = $input['payment_method'] ?? 'Cash';
 $custId         = (int) ($input['customer_id'] ?? 0) ?: null;
 $note           = mb_substr(trim($input['note'] ?? ''), 0, 255);
+$waiterId       = (int) ($input['waiter_id'] ?? 0) ?: null;
+$commissionRate = (int) ($input['commission_rate'] ?? 0);
 
 $validMethods = ['Cash', 'M-Pesa', 'Card', 'Bank Transfer'];
 if (!in_array($method, $validMethods, true)) {
@@ -86,15 +88,32 @@ try {
     $tax      = round(($subtotal - $discount) * $taxRate / 100, 2);
     $total    = round($subtotal - $discount + $tax, 2);
 
+    // Calculate waiter commission
+    $commissionAmount = 0.00;
+    if ($waiterId && in_array($commissionRate, [2, 5], true)) {
+        $wStmt = $pdo->prepare('SELECT 1 FROM users WHERE id = ? AND role = "waiter" AND is_active = 1');
+        $wStmt->execute([$waiterId]);
+        if ($wStmt->fetch()) {
+            $commissionAmount = round(($subtotal - $discount) * $commissionRate / 100, 2);
+        } else {
+            $waiterId = null;
+            $commissionRate = 0;
+        }
+    } else {
+        $waiterId = null;
+        $commissionRate = 0;
+    }
+
     $receiptNo = 'RCP-' . date('ymd') . '-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 5));
 
     $saleStmt = $pdo->prepare(
-        'INSERT INTO sales (receipt_no, user_id, customer_id, subtotal, discount, tax, total, paid, change_due, payment_method, note)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)'
+        'INSERT INTO sales (receipt_no, user_id, customer_id, subtotal, discount, tax, total, paid, change_due, payment_method, note, waiter_id, commission_rate, commission_amount)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
     );
     $saleStmt->execute([
         $receiptNo, current_user()['id'], $custId,
         $subtotal, $discount, $tax, $total, $total, 0, $method, $note,
+        $waiterId, $commissionRate, $commissionAmount
     ]);
     $saleId = (int) $pdo->lastInsertId();
 

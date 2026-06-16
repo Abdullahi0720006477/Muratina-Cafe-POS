@@ -100,6 +100,14 @@ function build_report(PDO $pdo, string $type, string $from, string $to): array
             }
             return [['Cashier', 'Orders', 'Total Sales'], $rows->fetchAll(), 'Cashier Performance'];
 
+        case 'waiter':
+            $rows = $pdo->prepare(
+                'SELECT u.full_name, COUNT(s.id) orders, SUM(s.total) sales, SUM(s.commission_amount) commission
+                 FROM sales s JOIN users u ON u.id=s.waiter_id
+                 WHERE s.created_at BETWEEN ? AND ? GROUP BY u.id ORDER BY commission DESC');
+            $rows->execute($range);
+            return [['Waiter', 'Orders Served', 'Total Sales Volume', 'Total Commission'], $rows->fetchAll(), 'Waiter Commission Report'];
+
         case 'monthly':
             if ($role === 'cashier') {
                 $rows = $pdo->prepare(
@@ -177,6 +185,7 @@ if (user_role() !== 'cashier') {
     $reportTypes['profit'] = 'Profit';
 }
 $reportTypes['cashier'] = 'Cashier Performance';
+$reportTypes['waiter'] = 'Waiter Commissions';
 $reportTypes['attendance'] = 'Attendance';
 $qs = fn(array $extra) => '?' . http_build_query(array_merge(['type' => $type, 'from' => $from, 'to' => $to], $extra));
 ?>
