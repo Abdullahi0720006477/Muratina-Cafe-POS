@@ -16,11 +16,12 @@ if (!csrf_verify($_SERVER['HTTP_X_CSRF_TOKEN'] ?? '')) {
     json_out(['ok' => false, 'error' => 'Invalid security token. Refresh the page.'], 419);
 }
 
-$items    = $input['items'] ?? [];
-$discount = max(0, (float) ($input['discount'] ?? 0));
-$method   = $input['payment_method'] ?? 'Cash';
-$custId   = (int) ($input['customer_id'] ?? 0) ?: null;
-$note     = mb_substr(trim($input['note'] ?? ''), 0, 255);
+$items          = $input['items'] ?? [];
+$discount       = max(0, (float) ($input['discount'] ?? 0));
+$redeemedPoints = max(0, (int) ($input['redeemed_points'] ?? 0));
+$method         = $input['payment_method'] ?? 'Cash';
+$custId         = (int) ($input['customer_id'] ?? 0) ?: null;
+$note           = mb_substr(trim($input['note'] ?? ''), 0, 255);
 
 $validMethods = ['Cash', 'M-Pesa', 'Card', 'Bank Transfer'];
 if (!in_array($method, $validMethods, true)) {
@@ -64,6 +65,20 @@ try {
             'cost'  => (float) $p['purchase_price'],
             'line'  => $line,
         ];
+    }
+
+    // Deduct loyalty points and add to discount
+    if ($custId && $redeemedPoints > 0) {
+        $cStmt = $pdo->prepare('SELECT loyalty_points FROM customers WHERE id = ? FOR UPDATE');
+        $cStmt->execute([$custId]);
+        $cPoints = (int) $cStmt->fetchColumn();
+        if ($cPoints < $redeemedPoints) {
+            throw new RuntimeException('Customer has insufficient loyalty points.');
+        }
+        $pdo->prepare('UPDATE customers SET loyalty_points = loyalty_points - ? WHERE id = ?')
+            ->execute([$redeemedPoints, $custId]);
+        $discount += $redeemedPoints;
+        $note = trim($note . " (Redeemed " . $redeemedPoints . " points)");
     }
 
     $discount = min($discount, $subtotal);

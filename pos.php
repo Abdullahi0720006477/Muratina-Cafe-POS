@@ -7,7 +7,7 @@ $categories = $pdo->query('SELECT * FROM categories ORDER BY name')->fetchAll();
 $products   = $pdo->query(
     'SELECT id, name, selling_price, stock_qty, category_id, image FROM products WHERE is_active=1 ORDER BY name'
 )->fetchAll();
-$customers  = $pdo->query('SELECT id, name FROM customers ORDER BY name')->fetchAll();
+$customers  = $pdo->query('SELECT id, name, loyalty_points, phone FROM customers ORDER BY name')->fetchAll();
 $taxRate    = (float) (settings()['tax_rate'] ?? 0);
 
 $pageTitle = 'POS Sales';
@@ -47,11 +47,15 @@ require __DIR__ . '/includes/header.php';
         </div>
         <div class="cart-foot">
             <div class="mb-2">
-                <select id="customerSelect" class="form-select form-select-sm">
+                <select id="customerSelect" class="form-select form-select-sm" onchange="POS.onCustomerChange()">
                     <?php foreach ($customers as $cu): ?>
-                        <option value="<?= $cu['id'] ?>"><?= e($cu['name']) ?></option>
+                        <option value="<?= $cu['id'] ?>" data-points="<?= (int)$cu['loyalty_points'] ?>" data-phone="<?= e($cu['phone'] ?? '') ?>"><?= e($cu['name']) ?> (<?= (int)$cu['loyalty_points'] ?> pts)</option>
                     <?php endforeach; ?>
                 </select>
+                <div id="loyaltyPointsWrap" class="mt-1 d-none" style="font-size:0.8rem;font-weight:600;">
+                    <span class="text-muted"><i class="fa-solid fa-star text-warning"></i> <span id="customerPointsVal">0</span> points available</span>
+                    <button type="button" class="btn btn-xs btn-outline-warning ms-2 py-0 px-2" style="font-size:0.75rem;" id="btnRedeem" onclick="POS.redeem()">Redeem</button>
+                </div>
             </div>
             <div class="cart-line"><span>Subtotal</span><span id="cSubtotal"><?= money(0) ?></span></div>
             <div class="cart-line">
@@ -79,6 +83,8 @@ require __DIR__ . '/includes/header.php';
 const PRODUCTS = <?= json_encode($products) ?>;
 const POS = {
     cart: [], category: 'all', search: '', payment: 'Cash',
+    customerPoints: 0, customerPhone: '', redeemedPoints: 0,
+    mpesaPhone: '', mpesaTxId: '',
 
     grid() {
         const g = document.getElementById('productGrid');
@@ -117,13 +123,25 @@ const POS = {
         this.render();
     },
 
-    clear() { this.cart = []; document.getElementById('cDiscount').value = 0; this.render(); },
+    clear() {
+        this.cart = [];
+        document.getElementById('cDiscount').value = 0;
+        this.redeemedPoints = 0;
+        const btn = document.getElementById('btnRedeem');
+        if (btn) {
+            btn.textContent = 'Redeem';
+            btn.classList.remove('btn-warning');
+            btn.classList.add('btn-outline-warning');
+        }
+        this.render();
+    },
 
     totals() {
         const sub = this.cart.reduce((s, i) => s + i.price * i.qty, 0);
         let disc = Math.min(parseFloat(document.getElementById('cDiscount').value) || 0, sub);
-        const tax = (sub - disc) * (window.TAX_RATE / 100);
-        return { sub, disc, tax, total: sub - disc + tax };
+        const totalDisc = Math.min(disc + this.redeemedPoints, sub);
+        const tax = (sub - totalDisc) * (window.TAX_RATE / 100);
+        return { sub, disc, tax, total: sub - totalDisc + tax, totalDisc };
     },
 
     render() {
@@ -149,18 +167,135 @@ const POS = {
         document.getElementById('chargeAmt').textContent = fmtMoney(t.total);
     },
 
+    onCustomerChange() {
+        const select = document.getElementById('customerSelect');
+        const opt = select.options[select.selectedIndex];
+        const points = parseInt(opt.dataset.points) || 0;
+        const phone = opt.dataset.phone || '';
+        this.customerPoints = points;
+        this.customerPhone = phone;
+        this.redeemedPoints = 0;
+
+        const wrap = document.getElementById('loyaltyPointsWrap');
+        const val = document.getElementById('customerPointsVal');
+        const btn = document.getElementById('btnRedeem');
+
+        if (points > 0) {
+            wrap.classList.remove('d-none');
+            val.textContent = points;
+            btn.textContent = 'Redeem';
+            btn.disabled = false;
+            btn.classList.remove('btn-warning');
+            btn.classList.add('btn-outline-warning');
+        } else {
+            wrap.classList.add('d-none');
+        }
+        this.render();
+    },
+
+    redeem() {
+        const btn = document.getElementById('btnRedeem');
+        if (this.redeemedPoints > 0) {
+            this.redeemedPoints = 0;
+            btn.textContent = 'Redeem';
+            btn.classList.remove('btn-warning');
+            btn.classList.add('btn-outline-warning');
+        } else {
+            const sub = this.cart.reduce((s, i) => s + i.price * i.qty, 0);
+            const disc = Math.min(parseFloat(document.getElementById('cDiscount').value) || 0, sub);
+            const maxRedeemable = Math.min(this.customerPoints, Math.max(0, sub - disc));
+            if (maxRedeemable > 0) {
+                this.redeemedPoints = maxRedeemable;
+                btn.textContent = 'Undo';
+                btn.classList.remove('btn-outline-warning');
+                btn.classList.add('btn-warning');
+            } else {
+                alert('No balance to redeem points against.');
+            }
+        }
+        this.render();
+    },
+
     checkout() {
         if (!this.cart.length) { alert('Cart is empty.'); return; }
         const t = this.totals();
+        
+        if (this.payment === 'M-Pesa') {
+            document.getElementById('mpesaPhone').value = this.customerPhone || '';
+            document.getElementById('mpesaPromptAmt').textContent = t.total.toFixed(2);
+            document.getElementById('mpesaStep1').classList.remove('d-none');
+            document.getElementById('mpesaStep2').classList.add('d-none');
+            document.getElementById('mpesaStep3').classList.add('d-none');
+            document.getElementById('mpesaStep4').classList.add('d-none');
+            const mpesaModal = new bootstrap.Modal(document.getElementById('mpesaModal'));
+            mpesaModal.show();
+        } else {
+            this.submitCheckout(t.disc, '');
+        }
+    },
+
+    sendStkPush() {
+        const phone = document.getElementById('mpesaPhone').value.trim();
+        if (!/^\d{9,12}$/.test(phone)) {
+            alert('Please enter a valid phone number.');
+            return;
+        }
+        this.mpesaPhone = phone;
+        document.getElementById('mpesaStep1').classList.add('d-none');
+        document.getElementById('mpesaStep2').classList.remove('d-none');
+        document.getElementById('mpesaPin').value = '';
+    },
+
+    cancelStk() {
+        document.getElementById('mpesaStep2').classList.add('d-none');
+        document.getElementById('mpesaStep1').classList.remove('d-none');
+    },
+
+    cancelMpesa() {
+        const m = bootstrap.Modal.getInstance(document.getElementById('mpesaModal'));
+        if (m) m.hide();
+    },
+
+    confirmPin() {
+        const pin = document.getElementById('mpesaPin').value;
+        if (!/^\d{4}$/.test(pin)) {
+            alert('Please enter a 4-digit M-Pesa PIN.');
+            return;
+        }
+        document.getElementById('mpesaStep2').classList.add('d-none');
+        document.getElementById('mpesaStep3').classList.remove('d-none');
+        
+        setTimeout(() => {
+            const randomId = 'MP' + Math.random().toString(36).substring(2, 10).toUpperCase();
+            this.mpesaTxId = randomId;
+            document.getElementById('mpesaTxId').textContent = randomId;
+            document.getElementById('mpesaStep3').classList.add('d-none');
+            document.getElementById('mpesaStep4').classList.remove('d-none');
+        }, 1800);
+    },
+
+    finalizeMpesaCheckout() {
+        this.cancelMpesa();
+        const t = this.totals();
+        const extraNote = `M-Pesa Ref: ${this.mpesaTxId} (Phone: ${this.mpesaPhone})`;
+        this.submitCheckout(t.disc, extraNote);
+    },
+
+    submitCheckout(discountValue, extraNote) {
         const btn = document.getElementById('checkoutBtn');
         const restore = () => { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-circle-check"></i> Charge <span id="chargeAmt"></span>'; this.render(); };
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing…';
+        
+        const noteInput = document.getElementById('cNote').value.trim();
+        const note = noteInput ? (noteInput + ' | ' + extraNote) : extraNote;
+
         postJSON(BASE_URL + '/api/process_sale.php', {
             items: this.cart.map(i => ({ id: i.id, qty: i.qty })),
-            discount: t.disc,
+            discount: discountValue,
+            redeemed_points: this.redeemedPoints,
             payment_method: this.payment,
             customer_id: document.getElementById('customerSelect').value,
-            note: document.getElementById('cNote').value
+            note: note
         }).then(res => {
             if (res.ok) {
                 window.open(BASE_URL + '/receipt.php?no=' + encodeURIComponent(res.receipt_no), '_blank');
@@ -185,7 +320,60 @@ document.querySelectorAll('.pay-opt').forEach(o => o.addEventListener('click', (
     document.querySelectorAll('.pay-opt').forEach(x => x.classList.remove('active'));
     o.classList.add('active'); POS.payment = o.dataset.pay;
 }));
-POS.grid(); POS.render();
+POS.grid(); POS.onCustomerChange();
 </script>
+
+<!-- M-Pesa STK Push Simulator Modal -->
+<div class="modal fade" id="mpesaModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:380px;">
+    <div class="modal-content glass" style="border: 1px solid var(--border); border-radius: 20px; background: rgba(var(--surface-rgb), 0.85); backdrop-filter: blur(12px);">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold" style="color:var(--brand-2);"><i class="fa-solid fa-mobile-screen me-2"></i> M-Pesa Checkout</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" onclick="POS.cancelMpesa()"></button>
+      </div>
+      <div class="modal-body text-center pt-2">
+        <div id="mpesaStep1">
+            <p class="text-muted small">Enter the customer's phone number to send the M-Pesa STK Push payment prompt.</p>
+            <div class="input-group mb-3">
+                <span class="input-group-text"><i class="fa-solid fa-phone"></i></span>
+                <input type="text" id="mpesaPhone" class="form-control" placeholder="e.g. 0701234567" value="">
+            </div>
+            <button type="button" class="btn btn-brand w-100 py-2" onclick="POS.sendStkPush()"><i class="fa-solid fa-paper-plane"></i> Initiate STK Push</button>
+        </div>
+        
+        <div id="mpesaStep2" class="d-none">
+            <!-- Simulated Phone Frame -->
+            <div class="phone-frame mx-auto mb-3">
+                <div class="phone-screen">
+                    <div class="stk-prompt">
+                        <div class="stk-logo mb-2"><span class="badge bg-success">M-PESA</span></div>
+                        <div class="stk-text mb-3">Do you want to pay KSh <span id="mpesaPromptAmt">0</span> to <b>Muratina Café</b>?</div>
+                        <input type="password" id="mpesaPin" class="form-control text-center mb-2" placeholder="Enter PIN" maxlength="4" inputmode="numeric">
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-danger w-50" onclick="POS.cancelStk()">Cancel</button>
+                            <button type="button" class="btn btn-sm btn-success w-50" onclick="POS.confirmPin()">Send</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <p class="text-muted small mb-0">Simulating STK Push PIN prompt on customer's phone...</p>
+        </div>
+        
+        <div id="mpesaStep3" class="d-none py-4">
+            <div class="spinner-border text-warning mb-3" role="status"></div>
+            <h6 class="fw-bold">Verifying Transaction...</h6>
+            <p class="text-muted small mb-0">Waiting for M-Pesa IPN confirmation...</p>
+        </div>
+        
+        <div id="mpesaStep4" class="d-none py-3">
+            <div class="text-success fa-3x mb-2"><i class="fa-solid fa-circle-check"></i></div>
+            <h6 class="fw-bold text-success">Payment Confirmed!</h6>
+            <p class="text-muted small mb-3">Transaction ID: <code id="mpesaTxId">MPESA-XXX</code></p>
+            <button type="button" class="btn btn-brand w-100" onclick="POS.finalizeMpesaCheckout()">Complete Order</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

@@ -1,0 +1,9 @@
+- [x] Add loyalty_points to customer selection query in pos.php
+- [x] Add data-points to customer select options in pos.php
+- [x] Add loyalty points display and "Redeem" button to pos.php layout
+- [x] Add #mpesaModal simulator markup to pos.php
+- [x] Implement M-Pesa simulator and loyalty points redemption logic in pos.php Javascript
+- [x] Update api/process_sale.php to handle redeemed_points and deduct them in DB transaction
+- [x] Add mobile simulator styling rules to style.css
+- [x] Verify syntax on all files
+- [x] Verify functionalities manual check
